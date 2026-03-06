@@ -1,0 +1,5 @@
+{
+    "require": {
+        "garethp/php-ews": "^0.9.6"
+    }
+}
