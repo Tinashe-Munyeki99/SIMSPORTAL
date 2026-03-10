@@ -1,0 +1,12 @@
+{
+    "Authentication": true,
+    "Company": true,
+    "ZimraIntergration": true,
+    "IntergrationConfigs": true,
+    "Permission": true,
+    "EmailSettings": true,
+    "Report": true,
+    "Site": true,
+    "RolesAndPermissions": true,
+    "RiskDepertment": true
+}

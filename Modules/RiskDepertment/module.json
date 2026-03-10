@@ -1,0 +1,11 @@
+{
+    "name": "RiskDepertment",
+    "alias": "riskdepertment",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\RiskDepertment\\Providers\\RiskDepertmentServiceProvider"
+    ],
+    "files": []
+}
