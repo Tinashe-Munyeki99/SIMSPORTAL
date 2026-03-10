@@ -1,0 +1,4 @@
+.env
+api/.env
+vendor/
+node_modules/
