@@ -27,6 +27,19 @@ return [
     'resend' => [
         'key' => env('RESEND_KEY'),
     ],
+    'msgraph' => [
+        'client_id' => env('MSGRAPH_CLIENT_ID'),
+        'client_secret' => env('MSGRAPH_CLIENT_SECRET'),
+        'tenant_id' => env('MSGRAPH_TENANT_ID'),
+        'from_address' => env('MSGRAPH_FROM_ADDRESS'),
+    ],
+
+    'msgraph2' => [
+        'client_id' => env('MSGRAPH_CLIENT_ID2'),
+        'client_secret' => env('MSGRAPH_CLIENT_SECRET2'),
+        'tenant_id' => env('MSGRAPH_TENANT_ID2'),
+        'from_address' => env('MSGRAPH_FROM_ADDRESS2'),
+    ],
 
     'slack' => [
         'notifications' => [

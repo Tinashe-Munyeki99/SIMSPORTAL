@@ -2130,28 +2130,72 @@ class RiskDepertmentController extends Controller
         }
     }
 
+//    private function getAccessTokenForDomain(string $fromAddress): string
+//    {
+//        $fromAddress = strtolower(trim($fromAddress));
+//        $domain = substr(strrchr($fromAddress, "@"), 1) ?: "";
+//
+//        // Route by domain suffix
+//        $isComTenant  = str_ends_with($domain, 'simbisa.com');   // matches zw-simbisa.com, simbisa.com, *.simbisa.com
+//        $isCoZwTenant = str_ends_with($domain, 'simbisa.co.zw'); // matches simbisa.co.zw, *.simbisa.co.zw
+//
+//        $suffix = match (true) {
+//            $isCoZwTenant => '',    // primary
+//            $isComTenant  => '2',   // tenant 2
+//            default => throw new \Exception("Unsupported FROM domain: {$domain}"),
+//        };
+//
+//        $tenantId     = env("MSGRAPH_TENANT_ID{$suffix}");
+//        $clientId     = env("MSGRAPH_CLIENT_ID{$suffix}");
+//        $clientSecret = env("MSGRAPH_CLIENT_SECRET{$suffix}");
+//        ///dd($fromAddress,$tenantId, $clientId, $clientSecret);
+//
+//        if (!$tenantId || !$clientId || !$clientSecret) {
+//            throw new \Exception("Missing MSGRAPH_* env vars for domain {$domain} (suffix '{$suffix}')");
+//        }
+//
+//        $url = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
+//
+//        $response = Http::asForm()->post($url, [
+//            'client_id' => $clientId,
+//            'scope' => 'https://graph.microsoft.com/.default',
+//            'client_secret' => $clientSecret,
+//            'grant_type' => 'client_credentials',
+//        ]);
+//
+//        if ($response->failed()) {
+//            throw new \Exception("Failed to get access token: " . $response->body());
+//        }
+//
+//        $json = $response->json();
+//        if (!isset($json['access_token'])) {
+//            throw new \Exception("Access token missing in response: " . $response->body());
+//        }
+//
+//        return $json['access_token'];
+//    }
+
     private function getAccessTokenForDomain(string $fromAddress): string
     {
         $fromAddress = strtolower(trim($fromAddress));
         $domain = substr(strrchr($fromAddress, "@"), 1) ?: "";
 
-        // Route by domain suffix
-        $isComTenant  = str_ends_with($domain, 'simbisa.com');   // matches zw-simbisa.com, simbisa.com, *.simbisa.com
-        $isCoZwTenant = str_ends_with($domain, 'simbisa.co.zw'); // matches simbisa.co.zw, *.simbisa.co.zw
+        // Domain routing
+        $isComTenant  = str_ends_with($domain, 'simbisa.com');
+        $isCoZwTenant = str_ends_with($domain, 'simbisa.co.zw');
 
-        $suffix = match (true) {
-            $isCoZwTenant => '',    // primary
-            $isComTenant  => '2',   // tenant 2
+        $configKey = match (true) {
+            $isCoZwTenant => 'services.msgraph',
+            $isComTenant  => 'services.msgraph2',
             default => throw new \Exception("Unsupported FROM domain: {$domain}"),
         };
 
-        $tenantId     = env("MSGRAPH_TENANT_ID{$suffix}");
-        $clientId     = env("MSGRAPH_CLIENT_ID{$suffix}");
-        $clientSecret = env("MSGRAPH_CLIENT_SECRET{$suffix}");
-        ///dd($fromAddress,$tenantId, $clientId, $clientSecret);
+        $tenantId     = config("{$configKey}.tenant_id");
+        $clientId     = config("{$configKey}.client_id");
+        $clientSecret = config("{$configKey}.client_secret");
 
         if (!$tenantId || !$clientId || !$clientSecret) {
-            throw new \Exception("Missing MSGRAPH_* env vars for domain {$domain} (suffix '{$suffix}')");
+            throw new \Exception("Missing MSGRAPH config for domain {$domain}");
         }
 
         $url = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
@@ -2168,6 +2212,7 @@ class RiskDepertmentController extends Controller
         }
 
         $json = $response->json();
+
         if (!isset($json['access_token'])) {
             throw new \Exception("Access token missing in response: " . $response->body());
         }

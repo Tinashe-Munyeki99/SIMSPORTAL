@@ -270,8 +270,14 @@ class AuthenticationController extends Controller
                 'password' => $plainPassword,
             ])->render();
 
+            $fromAddress = config('services.msgraph.from_address');
+
+            if (!$fromAddress) {
+                throw new \Exception('MSGRAPH_FROM_ADDRESS is not configured.');
+            }
+
             $this->sendGraphEmail(
-                env('MSGRAPH_FROM_ADDRESS'),
+                $fromAddress,
                 $newSystemUser->email,
                 $subject,
                 $body
