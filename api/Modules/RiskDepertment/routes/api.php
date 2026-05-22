@@ -38,6 +38,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/downloadpdf/{id}', [RiskDepertmentController::class, 'downloadSinglePdf'])->middleware(ResolveSiteFromDomain::class);
     Route::get('/incidents/analytics/by-type', [ReportController::class, 'getIncidentByType'])->middleware(ResolveSiteFromDomain::class);
     Route::get('/incidents/get-financial-loss', [ReportController::class, 'getFinancialLoss'])->middleware(ResolveSiteFromDomain::class);
+    Route::post('/risk/custom-incident-report', [ReportController::class, 'customIncidentReport'])->middleware(ResolveSiteFromDomain::class);
 
 
     Route::get('/incident-notification-rules', [IncidentNotificationRuleController::class, 'index'])->middleware(ResolveSiteFromDomain::class);

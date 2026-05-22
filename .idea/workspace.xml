@@ -4,12 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="initial commit">
-      <change beforePath="$PROJECT_DIR$/.idea/phpunit.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/phpunit.xml" afterDir="false" />
+    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="latest commit">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/config/services.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/config/services.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Models/SystemUser.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Models/SystemUser.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/routes/web.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/routes/web.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/routes/api.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,6 +35,13 @@
     <execution>
       <executable path="composer" />
     </execution>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="PHP File" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -253,7 +261,7 @@
       <workItem from="1776670087736" duration="594000" />
       <workItem from="1778052353467" duration="1682000" />
       <workItem from="1779089087388" duration="5942000" />
-      <workItem from="1779433178239" duration="541000" />
+      <workItem from="1779433178239" duration="10703000" />
     </task>
     <task id="LOCAL-00001" summary="test">
       <option name="closed" value="true" />
@@ -303,7 +311,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774513689771</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="latest commit">
+      <option name="closed" value="true" />
+      <created>1779433763081</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1779433763081</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -314,7 +330,8 @@
     <MESSAGE value="test 2" />
     <MESSAGE value="test 3" />
     <MESSAGE value="initial commit" />
-    <option name="LAST_COMMIT_MESSAGE" value="initial commit" />
+    <MESSAGE value="latest commit" />
+    <option name="LAST_COMMIT_MESSAGE" value="latest commit" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -330,12 +347,30 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php</url>
-          <line>264</line>
+          <line>28</line>
           <properties>
             <option name="className" value="\Modules\RiskDepertment\Http\Controllers\ReportController" />
             <option name="methodName" value="getIncidentByType" />
           </properties>
           <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="php-line-method">
+          <url>file://$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php</url>
+          <line>1583</line>
+          <properties>
+            <option name="className" value="\Modules\Authentication\Http\Controllers\AuthenticationController" />
+            <option name="methodName" value="listDepertments" />
+          </properties>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="php-line-method">
+          <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php</url>
+          <line>366</line>
+          <properties>
+            <option name="className" value="\Modules\RiskDepertment\Http\Controllers\ReportController" />
+            <option name="methodName" value="getFinancialLoss" />
+          </properties>
+          <option name="timeStamp" value="6" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

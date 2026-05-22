@@ -30,7 +30,29 @@ class SystemUser extends Authenticatable
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
+    protected $fillable = [
+        'id',
+        'full_name',
+        'email',
+        'password',
+        'site_id',
+        'department_id',
+        'password_setup_token',
+        'password_setup_expires_at',
+        'password_setup_completed_at',
+    ];
+
+    protected $casts = [
+        // existing casts...
+        'password_setup_expires_at' => 'datetime',
+        'password_setup_completed_at' => 'datetime',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+        'password_setup_token',
+    ];
 
     public function otherInfo():hasOne
     {

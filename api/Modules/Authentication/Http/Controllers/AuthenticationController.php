@@ -93,37 +93,440 @@ class AuthenticationController extends Controller
 //            ], 500);
 //        }
 //    }
+
+
+//    public function registerUser(Request $request)
+//    {
+//        $site = app('site');
+//
+//        $result = hasPermission(auth()->user()->role_id, 'create_user', $site->id);
+//        if ($result !== true) {
+//            return $result;
+//        }
+//
+//        // ✅ validate WITHOUT password (we generate it)
+//        $validator = Validator::make($request->all(), [
+//            'full_name' => 'required|string|max:255',
+//            'last_name' => 'nullable|string|max:255',
+//
+//            'email' => [
+//                'required', 'string', 'email', 'max:255',
+//                // unique per site (same pattern as selfRegisterUser)
+//                Rule::unique('system_users', 'email')->where(fn ($q) => $q->where('site_id', $site->id)),
+//            ],
+//
+//            'role_id' => 'required|string|exists:roles,id',
+//            'designation_id' => 'required|string|exists:designations,id',
+//            'department_id' => 'required|string|exists:depertments,id', // ⚠️ check spelling
+//
+//            'multicountry_viewer' => 'required|boolean',
+//
+//            // if NOT multicountry => country required, else nullable
+//            'country_id' => [
+//                'nullable',
+//                'uuid',
+//                Rule::requiredIf(fn () => (bool)$request->multicountry_viewer === false),
+//                'exists:countries,id',
+//            ],
+//
+//            'brand_ids' => ['nullable', 'array'],
+//            'brand_ids.*' => ['uuid', 'exists:brands,id'],
+//
+//            'office_ids' => ['nullable', 'array'],
+//            'office_ids.*' => ['uuid', 'exists:offices,id'],
+//
+//            // If you also collect these in admin create-user UI
+//            'phone' => 'nullable|string|max:30',
+//            'position' => 'nullable|string|max:255',
+//            'city' => 'nullable|string|max:255',
+//            'country' => 'nullable|string|max:255',
+//            'shop_name' => 'nullable|string|max:255',
+//        ]);
+//
+//        // ✅ enforce: must choose at least one brand or office
+//        $validator->after(function ($v) use ($request) {
+//            $brands = (array) $request->input('brand_ids', []);
+//            $offices = (array) $request->input('office_ids', []);
+//
+//            if (count($brands) === 0 && count($offices) === 0) {
+//                $v->errors()->add('brand_ids', 'Select at least one brand or office.');
+//            }
+//
+//            if ((bool)$request->multicountry_viewer === false && !$request->filled('country_id')) {
+//                $v->errors()->add('country_id', 'Country is required for non-multicountry users.');
+//            }
+//        });
+//
+//        if ($validator->fails()) {
+//            return response()->json([
+//                "status"  => 422,
+//                "message" => "Validation error",
+//                "data"    => $validator->errors()
+//            ], 422);
+//        }
+//
+//        $validated = $validator->validated();
+//
+//        // ✅ OPTIONAL: domain restriction (same as selfRegisterUser)
+//        $allowedDomains = ['fisctrack.com', 'simbisa.co.zw', 'zw-simbisa.com', 'simbisabrands.com', 'simbisa.com'];
+//        $emailDomain = strtolower(substr(strrchr($validated['email'], "@"), 1));
+//        if (!in_array($emailDomain, $allowedDomains, true)) {
+//            return response()->json([
+//                'status' => 403,
+//                'message' => "Registration restricted to authorized domains only. email domain '$emailDomain' is not allowed.",
+//                'error' => "Email domain '$emailDomain' is not allowed.",
+//            ], 403);
+//        }
+//
+//        try {
+//            // ✅ generate password and email it
+//            $plainPassword = Str::password(10);
+//
+//            $newSystemUser = DB::transaction(function () use ($validated, $site, $plainPassword) {
+//                $user = new SystemUser();
+//                $user->full_name = $validated['full_name'];
+//                $user->email = $validated['email'];
+//
+//                // generated password
+//                $user->password = Hash::make($plainPassword);
+//
+//                $user->role_id = $validated['role_id'];
+//                $user->designation_id = $validated['designation_id'];
+//                $user->department_id = $validated['department_id'];
+//                $user->site_id = $site->id;
+//
+//
+//
+//                $user->save();
+//
+//                // Optional other-info update (only if your table exists + you want it)
+//                // If you already have a proper create flow, keep it. Otherwise:
+//                if (
+//                    array_key_exists('phone', $validated) ||
+//                    array_key_exists('position', $validated) ||
+//                    array_key_exists('city', $validated) ||
+//                    array_key_exists('country_id', $validated) ||
+//                    array_key_exists('shop_name', $validated)
+//                ) {
+//                    // create or update OtherUserInfo if you have it
+//                    $other = OtherUserInfo::firstOrNew(['user_id' => $user->id]);
+//
+//                    if (isset($validated['phone'])) $other->phone = $validated['phone'];
+//                    if (isset($validated['position'])) $other->position = $validated['position'] ?? null;
+//                    if (isset($validated['city'])) $other->city = $validated['city'] ?? null;
+//
+//// ✅ assign UUID
+//                    if (array_key_exists('country_id', $validated)) {
+//                        $other->country = $validated['country_id'];
+//                    }
+//
+//                    if (isset($validated['shop_name'])) $other->shop_name = $validated['shop_name'] ?? null;
+//
+//                    $other->save();
+//                }
+//
+//                // ✅ BrandOfficeManagement mapping
+//                $isMulti = (bool)($validated['multicountry_viewer'] ?? false);
+//                $countryId = $isMulti ? null : ($validated['country_id'] ?? null);
+//
+//                $brandIds = $validated['brand_ids'] ?? [];
+//                $officeIds = $validated['office_ids'] ?? [];
+//
+//                $rows = [];
+//
+//                foreach ($brandIds as $bid) {
+//                    $rows[] = [
+//                        'id' => (string) Str::uuid(),
+//                        'user_id' => $user->id,
+//                        'brand_id' => $bid,
+//                        'office_id' => null,
+//                        'country_id' => $countryId,
+//                    ];
+//                }
+//
+//                foreach ($officeIds as $oid) {
+//                    $rows[] = [
+//                        'id' => (string) Str::uuid(),
+//                        'user_id' => $user->id,
+//                        'brand_id' => null,
+//                        'office_id' => $oid,
+//                        'country_id' => $countryId,
+//                    ];
+//                }
+//
+//                $unique = collect($rows)->unique(fn ($r) =>
+//                    ($r['user_id'] ?? '') . '|' . ($r['brand_id'] ?? '') . '|' . ($r['office_id'] ?? '') . '|' . ($r['country_id'] ?? '')
+//                )->values()->all();
+//
+//                if (count($unique)) {
+//                    BrandOfficeManagement::insert($unique);
+//                }
+//
+//                return $user;
+//            });
+//
+//            // ✅ send email with generated password
+//            $subject = "Welcome to Simbisa Portal — Your Account Details";
+//            $body = view('authentication::welcom', [
+//                'user' => $newSystemUser,
+//                'password' => $plainPassword,
+//            ])->render();
+//
+//            $fromAddress = config('services.msgraph.from_address');
+//
+//            if (!$fromAddress) {
+//                throw new \Exception('MSGRAPH_FROM_ADDRESS is not configured.');
+//            }
+//
+//            $this->sendGraphEmail(
+//                $fromAddress,
+//                $newSystemUser->email,
+//                $subject,
+//                $body
+//            );
+//
+//            // Optional: issue token or not (you did in selfRegisterUser)
+//            $token = $newSystemUser->createToken($newSystemUser->email . 'Auth-Token')->plainTextToken;
+//
+//            return response()->json([
+//                'message' => 'Registration successful. Please check your email for login credentials.',
+//                'token_type' => 'Bearer',
+//                'token' => $token,
+//                'user' => $newSystemUser->makeHidden(['password']),
+//            ], 200);
+//
+//        } catch (\Throwable $e) {
+//            return response()->json([
+//                'message' => 'Something went wrong while registering the user.',
+//                'error' => $e->getMessage(),
+//            ], 500);
+//        }
+//    }
+
+//    public function registerUser(Request $request)
+//    {
+//        try {
+//            $site = auth()->user()->site;
+//
+//            $validator = Validator::make($request->all(), [
+//                'name' => ['required', 'string', 'max:255'],
+//
+//                'email' => [
+//                    'required',
+//                    'string',
+//                    'email',
+//                    'max:255',
+//                    Rule::unique('system_users', 'email')
+//                        ->where(fn ($q) => $q->where('site_id', $site->id)),
+//                ],
+//
+//                'role_id' => ['required', 'string', 'exists:roles,id'],
+//                'designation_id' => ['required', 'string', 'exists:designations,id'],
+//                'department_id' => ['required', 'string', 'exists:departments,id'],
+//
+//                'multicountry_viewer' => ['required', 'boolean'],
+//
+//                'country_id' => [
+//                    'nullable',
+//                    'uuid',
+//                    Rule::requiredIf(fn () => filter_var($request->multicountry_viewer, FILTER_VALIDATE_BOOLEAN) === false),
+//                    'exists:countries,id',
+//                ],
+//
+//                'brand_ids' => ['nullable', 'array'],
+//                'brand_ids.*' => ['uuid', 'exists:brands,id'],
+//
+//                'office_ids' => ['nullable', 'array'],
+//                'office_ids.*' => ['uuid', 'exists:offices,id'],
+//
+//                'phone' => ['nullable', 'string', 'max:30'],
+//                'position' => ['nullable', 'string', 'max:255'],
+//                'city' => ['nullable', 'string', 'max:255'],
+//                'country' => ['nullable', 'string', 'max:255'],
+//                'shop_name' => ['nullable', 'string', 'max:255'],
+//            ]);
+//
+//            $validator->after(function ($v) use ($request) {
+//                $brands = (array) $request->input('brand_ids', []);
+//                $offices = (array) $request->input('office_ids', []);
+//
+//                if (count($brands) === 0 && count($offices) === 0) {
+//                    $v->errors()->add('brand_ids', 'Select at least one brand or office.');
+//                    $v->errors()->add('office_ids', 'Select at least one brand or office.');
+//                }
+//            });
+//
+//            if ($validator->fails()) {
+//                return response()->json([
+//                    'status' => 422,
+//                    'message' => 'Validation error',
+//                    'data' => $validator->errors(),
+//                ], 422);
+//            }
+//
+//            $validated = $validator->validated();
+//
+//            $newSystemUser = DB::transaction(function () use ($validated) {
+//                $setupToken = Str::random(64);
+//
+//                $user = SystemUser::create([
+//                    'id' => (string) Str::uuid(),
+//                    'name' => $validated['name'],
+//                    'email' => $validated['email'],
+//                    'role_id' => $validated['role_id'],
+//                    'designation_id' => $validated['designation_id'],
+//                    'department_id' => $validated['department_id'],
+//                    'multicountry_viewer' => $validated['multicountry_viewer'],
+//                    'country_id' => $validated['country_id'] ?? null,
+//                    'phone' => $validated['phone'] ?? null,
+//                    'position' => $validated['position'] ?? null,
+//                    'city' => $validated['city'] ?? null,
+//                    'country' => $validated['country'] ?? null,
+//                    'shop_name' => $validated['shop_name'] ?? null,
+//                    'password_setup_token' => $setupToken,
+//                    'password_setup_expires_at' => now()->addHours(48),
+//                ]);
+//
+//                $brandIds = $validated['brand_ids'] ?? [];
+//                $officeIds = $validated['office_ids'] ?? [];
+//                $countryId = $validated['country_id'] ?? null;
+//
+//                $rows = [];
+//
+//                foreach ($brandIds as $brandId) {
+//                    $rows[] = [
+//                        'id' => (string) Str::uuid(),
+//                        'user_id' => $user->id,
+//                        'brand_id' => $brandId,
+//                        'office_id' => null,
+//                        'country_id' => $countryId,
+//                        'created_at' => now(),
+//                        'updated_at' => now(),
+//                    ];
+//                }
+//
+//                foreach ($officeIds as $officeId) {
+//                    $rows[] = [
+//                        'id' => (string) Str::uuid(),
+//                        'user_id' => $user->id,
+//                        'brand_id' => null,
+//                        'office_id' => $officeId,
+//                        'country_id' => $countryId,
+//                        'created_at' => now(),
+//                        'updated_at' => now(),
+//                    ];
+//                }
+//
+//                $unique = collect($rows)->unique(fn ($row) =>
+//                    ($row['user_id'] ?? '') . '|' .
+//                    ($row['brand_id'] ?? '') . '|' .
+//                    ($row['office_id'] ?? '') . '|' .
+//                    ($row['country_id'] ?? '')
+//                )->values()->all();
+//
+//                if (count($unique)) {
+//                    BrandOfficeManagement::insert($unique);
+//                }
+//
+//                return $user;
+//            });
+//
+//            $setupUrl = route('auth.password.setup.form', [
+//                'token' => $newSystemUser->password_setup_token,
+//            ]);
+//
+//            $subject = 'Welcome to Simbisa Portal — Set Your Password';
+//
+//            $body = view('authentication::password-setup-email', [
+//                'user' => $newSystemUser,
+//                'setupUrl' => $setupUrl,
+//                'expiresAt' => $newSystemUser->password_setup_expires_at,
+//            ])->render();
+//
+//            $fromAddress = config('services.msgraph.from_address');
+//
+//            if (!$fromAddress) {
+//                throw new \Exception('MSGRAPH_FROM_ADDRESS is not configured.');
+//            }
+//
+//            $sent = $this->sendGraphEmail(
+//                $fromAddress,
+//                $newSystemUser->email,
+//                $subject,
+//                $body
+//            );
+//
+//            if (!$sent) {
+//                throw new \Exception('Failed to send password setup email.');
+//            }
+//
+//            return response()->json([
+//                'message' => 'Registration successful. A password setup link has been sent to the user email.',
+//                'user' => $newSystemUser->makeHidden([
+//                    'password',
+//                    'password_setup_token',
+//                ]),
+//            ], 200);
+//
+//        } catch (\Throwable $e) {
+//            return response()->json([
+//                'message' => 'Something went wrong while registering the user.',
+//                'error' => $e->getMessage(),
+//            ], 500);
+//        }
+//    }
     public function registerUser(Request $request)
     {
         $site = app('site');
 
-        $result = hasPermission(auth()->user()->role_id, 'create_user', $site->id);
+        if (!$site || !$site->id) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Site context could not be resolved.',
+                'error' => 'app("site") returned null. Check your site middleware or tenant resolver.',
+            ], 500);
+        }
+
+        $siteId = $site->id;
+
+        if (!auth()->check()) {
+            return response()->json([
+                'status' => 401,
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        $authUser = auth()->user();
+
+        $result = hasPermission($authUser->role_id, 'create_user', $siteId);
         if ($result !== true) {
             return $result;
         }
 
-        // ✅ validate WITHOUT password (we generate it)
         $validator = Validator::make($request->all(), [
             'full_name' => 'required|string|max:255',
             'last_name' => 'nullable|string|max:255',
 
             'email' => [
-                'required', 'string', 'email', 'max:255',
-                // unique per site (same pattern as selfRegisterUser)
-                Rule::unique('system_users', 'email')->where(fn ($q) => $q->where('site_id', $site->id)),
+                'required',
+                'string',
+                'email',
+                'max:255',
+                Rule::unique('system_users', 'email')->where(function ($q) use ($siteId) {
+                    $q->where('site_id', $siteId);
+                }),
             ],
 
             'role_id' => 'required|string|exists:roles,id',
             'designation_id' => 'required|string|exists:designations,id',
-            'department_id' => 'required|string|exists:depertments,id', // ⚠️ check spelling
+            'department_id' => 'required|string|exists:depertments,id',
 
             'multicountry_viewer' => 'required|boolean',
 
-            // if NOT multicountry => country required, else nullable
             'country_id' => [
                 'nullable',
                 'uuid',
-                Rule::requiredIf(fn () => (bool)$request->multicountry_viewer === false),
+                Rule::requiredIf(fn () => (bool) $request->multicountry_viewer === false),
                 'exists:countries,id',
             ],
 
@@ -133,7 +536,6 @@ class AuthenticationController extends Controller
             'office_ids' => ['nullable', 'array'],
             'office_ids.*' => ['uuid', 'exists:offices,id'],
 
-            // If you also collect these in admin create-user UI
             'phone' => 'nullable|string|max:30',
             'position' => 'nullable|string|max:255',
             'city' => 'nullable|string|max:255',
@@ -141,7 +543,6 @@ class AuthenticationController extends Controller
             'shop_name' => 'nullable|string|max:255',
         ]);
 
-        // ✅ enforce: must choose at least one brand or office
         $validator->after(function ($v) use ($request) {
             $brands = (array) $request->input('brand_ids', []);
             $offices = (array) $request->input('office_ids', []);
@@ -150,24 +551,31 @@ class AuthenticationController extends Controller
                 $v->errors()->add('brand_ids', 'Select at least one brand or office.');
             }
 
-            if ((bool)$request->multicountry_viewer === false && !$request->filled('country_id')) {
+            if ((bool) $request->multicountry_viewer === false && !$request->filled('country_id')) {
                 $v->errors()->add('country_id', 'Country is required for non-multicountry users.');
             }
         });
 
         if ($validator->fails()) {
             return response()->json([
-                "status"  => 422,
-                "message" => "Validation error",
-                "data"    => $validator->errors()
+                'status' => 422,
+                'message' => 'Validation error',
+                'data' => $validator->errors(),
             ], 422);
         }
 
         $validated = $validator->validated();
 
-        // ✅ OPTIONAL: domain restriction (same as selfRegisterUser)
-        $allowedDomains = ['fisctrack.com', 'simbisa.co.zw', 'zw-simbisa.com', 'simbisabrands.com', 'simbisa.com'];
-        $emailDomain = strtolower(substr(strrchr($validated['email'], "@"), 1));
+        $allowedDomains = [
+            'fisctrack.com',
+            'simbisa.co.zw',
+            'zw-simbisa.com',
+            'simbisabrands.com',
+            'simbisa.com',
+        ];
+
+        $emailDomain = strtolower(substr(strrchr($validated['email'], '@'), 1));
+
         if (!in_array($emailDomain, $allowedDomains, true)) {
             return response()->json([
                 'status' => 403,
@@ -177,54 +585,70 @@ class AuthenticationController extends Controller
         }
 
         try {
-            // ✅ generate password and email it
-            $plainPassword = Str::password(10);
+            $setupToken = Str::random(80);
+            $hashedSetupToken = hash('sha256', $setupToken);
+            $temporaryPassword = Str::random(40);
+            $expiresAt = now()->addHours(48);
 
-            $newSystemUser = DB::transaction(function () use ($validated, $site, $plainPassword) {
+            $newSystemUser = DB::transaction(function () use (
+                $validated,
+                $siteId,
+                $temporaryPassword,
+                $hashedSetupToken,
+                $expiresAt
+            ) {
                 $user = new SystemUser();
+
+                /*
+                 * If your SystemUser model does NOT auto-generate UUIDs,
+                 * uncomment this line:
+                 */
+                 $user->id = (string) Str::uuid();
+
                 $user->full_name = $validated['full_name'];
                 $user->email = $validated['email'];
 
-                // generated password
-                $user->password = Hash::make($plainPassword);
+                // Temporary password only. User must set their own password from email link.
+                $user->password = Hash::make($temporaryPassword);
+
+                $user->password_setup_token = $hashedSetupToken;
+                $user->password_setup_expires_at = $expiresAt;
+                $user->password_setup_completed_at = null;
 
                 $user->role_id = $validated['role_id'];
                 $user->designation_id = $validated['designation_id'];
                 $user->department_id = $validated['department_id'];
-                $user->site_id = $site->id;
-
-
+                $user->site_id = $siteId;
 
                 $user->save();
 
-                // Optional other-info update (only if your table exists + you want it)
-                // If you already have a proper create flow, keep it. Otherwise:
-                if (
-                    array_key_exists('phone', $validated) ||
-                    array_key_exists('position', $validated) ||
-                    array_key_exists('city', $validated) ||
-                    array_key_exists('country_id', $validated) ||
-                    array_key_exists('shop_name', $validated)
-                ) {
-                    // create or update OtherUserInfo if you have it
-                    $other = OtherUserInfo::firstOrNew(['user_id' => $user->id]);
+                $other = OtherUserInfo::firstOrNew([
+                    'user_id' => $user->id,
+                ]);
 
-                    if (isset($validated['phone'])) $other->phone = $validated['phone'];
-                    if (isset($validated['position'])) $other->position = $validated['position'] ?? null;
-                    if (isset($validated['city'])) $other->city = $validated['city'] ?? null;
-
-// ✅ assign UUID
-                    if (array_key_exists('country_id', $validated)) {
-                        $other->country = $validated['country_id'];
-                    }
-
-                    if (isset($validated['shop_name'])) $other->shop_name = $validated['shop_name'] ?? null;
-
-                    $other->save();
+                if (array_key_exists('phone', $validated)) {
+                    $other->phone = $validated['phone'] ?? null;
                 }
 
-                // ✅ BrandOfficeManagement mapping
-                $isMulti = (bool)($validated['multicountry_viewer'] ?? false);
+                if (array_key_exists('position', $validated)) {
+                    $other->position = $validated['position'] ?? null;
+                }
+
+                if (array_key_exists('city', $validated)) {
+                    $other->city = $validated['city'] ?? null;
+                }
+
+                if (array_key_exists('country_id', $validated)) {
+                    $other->country = $validated['country_id'] ?? null;
+                }
+
+                if (array_key_exists('shop_name', $validated)) {
+                    $other->shop_name = $validated['shop_name'] ?? null;
+                }
+
+                $other->save();
+
+                $isMulti = (bool) ($validated['multicountry_viewer'] ?? false);
                 $countryId = $isMulti ? null : ($validated['country_id'] ?? null);
 
                 $brandIds = $validated['brand_ids'] ?? [];
@@ -232,29 +656,32 @@ class AuthenticationController extends Controller
 
                 $rows = [];
 
-                foreach ($brandIds as $bid) {
+                foreach ($brandIds as $brandId) {
                     $rows[] = [
                         'id' => (string) Str::uuid(),
                         'user_id' => $user->id,
-                        'brand_id' => $bid,
+                        'brand_id' => $brandId,
                         'office_id' => null,
                         'country_id' => $countryId,
                     ];
                 }
 
-                foreach ($officeIds as $oid) {
+                foreach ($officeIds as $officeId) {
                     $rows[] = [
                         'id' => (string) Str::uuid(),
                         'user_id' => $user->id,
                         'brand_id' => null,
-                        'office_id' => $oid,
+                        'office_id' => $officeId,
                         'country_id' => $countryId,
                     ];
                 }
 
-                $unique = collect($rows)->unique(fn ($r) =>
-                    ($r['user_id'] ?? '') . '|' . ($r['brand_id'] ?? '') . '|' . ($r['office_id'] ?? '') . '|' . ($r['country_id'] ?? '')
-                )->values()->all();
+                $unique = collect($rows)->unique(function ($row) {
+                    return ($row['user_id'] ?? '') . '|' .
+                        ($row['brand_id'] ?? '') . '|' .
+                        ($row['office_id'] ?? '') . '|' .
+                        ($row['country_id'] ?? '');
+                })->values()->all();
 
                 if (count($unique)) {
                     BrandOfficeManagement::insert($unique);
@@ -263,11 +690,16 @@ class AuthenticationController extends Controller
                 return $user;
             });
 
-            // ✅ send email with generated password
-            $subject = "Welcome to Simbisa Portal — Your Account Details";
-            $body = view('authentication::welcom', [
+            $setupUrl = route('auth.password.setup.form', [
+                'token' => $setupToken,
+            ]);
+
+            $subject = 'Welcome to SimConnect — Set Your Password';
+
+            $body = view('authentication::password-setup-email', [
                 'user' => $newSystemUser,
-                'password' => $plainPassword,
+                'setupUrl' => $setupUrl,
+                'expiresAt' => $expiresAt,
             ])->render();
 
             $fromAddress = config('services.msgraph.from_address');
@@ -276,32 +708,132 @@ class AuthenticationController extends Controller
                 throw new \Exception('MSGRAPH_FROM_ADDRESS is not configured.');
             }
 
-            $this->sendGraphEmail(
+            $sent = $this->sendGraphEmail(
                 $fromAddress,
                 $newSystemUser->email,
                 $subject,
                 $body
             );
 
-            // Optional: issue token or not (you did in selfRegisterUser)
-            $token = $newSystemUser->createToken($newSystemUser->email . 'Auth-Token')->plainTextToken;
+            if (!$sent) {
+                throw new \Exception('Failed to send password setup email.');
+            }
 
             return response()->json([
-                'message' => 'Registration successful. Please check your email for login credentials.',
-                'token_type' => 'Bearer',
-                'token' => $token,
-                'user' => $newSystemUser->makeHidden(['password']),
+                'message' => 'Registration successful. A password setup link has been sent to the user email.',
+                'user' => $newSystemUser->makeHidden([
+                    'password',
+                    'password_setup_token',
+                ]),
             ], 200);
 
         } catch (\Throwable $e) {
+            Log::error('User registration failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             return response()->json([
                 'message' => 'Something went wrong while registering the user.',
                 'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
             ], 500);
         }
     }
+    public function showPasswordSetupForm(string $token)
+    {
+        $hashedToken = hash('sha256', $token);
 
+        $user = SystemUser::where('password_setup_token', $hashedToken)->first();
 
+        if (!$user) {
+            return view('authentication::password-setup-invalid', [
+                'title' => 'Invalid setup link',
+                'message' => 'This password setup link is invalid or has already been used.',
+            ]);
+        }
+
+        if ($user->password_setup_completed_at) {
+            return view('authentication::password-setup-invalid', [
+                'title' => 'Password already set',
+                'message' => 'Your password has already been set. You can now log in.',
+            ]);
+        }
+
+        if (
+            $user->password_setup_expires_at &&
+            now()->greaterThan($user->password_setup_expires_at)
+        ) {
+            return view('authentication::password-setup-invalid', [
+                'title' => 'Setup link expired',
+                'message' => 'This password setup link has expired. Please contact your administrator for a new account setup link.',
+            ]);
+        }
+
+        return view('authentication::password-setup', [
+            'token' => $token,
+            'user' => $user,
+        ]);
+    }
+
+    public function completePasswordSetup(Request $request, string $token)
+    {
+        $hashedToken = hash('sha256', $token);
+
+        $user = SystemUser::where('password_setup_token', $hashedToken)->first();
+
+        if (!$user) {
+            return back()->withErrors([
+                'token' => 'This password setup link is invalid or has already been used.',
+            ]);
+        }
+
+        if ($user->password_setup_completed_at) {
+            return redirect()
+                ->route('auth.password.setup.form', ['token' => $token])
+                ->withErrors([
+                    'token' => 'Your password has already been set.',
+                ]);
+        }
+
+        if (
+            $user->password_setup_expires_at &&
+            now()->greaterThan($user->password_setup_expires_at)
+        ) {
+            return redirect()
+                ->route('auth.password.setup.form', ['token' => $token])
+                ->withErrors([
+                    'token' => 'This password setup link has expired.',
+                ]);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'password' => [
+                'required',
+                'confirmed',
+                Password::min(8)->letters()->numbers(),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $user->password = Hash::make($request->password);
+        $user->password_setup_token = null;
+        $user->password_setup_expires_at = null;
+        $user->password_setup_completed_at = now();
+        $user->save();
+
+        return view('authentication::password-setup-success', [
+            'user' => $user,
+        ]);
+    }
 
 
     public function updateUser(Request $request, string $id)
@@ -538,115 +1070,115 @@ class AuthenticationController extends Controller
 
 
 
-    public function selfRegisterUser(Request $request)
-    {
-        $site = app('site');
-
-        $validator = Validator::make($request->all(), [
-            'full_name' => 'required|string|max:255',
-
-
-            'email' => [
-                'required', 'string', 'email', 'max:255',
-                // Option A (global unique):
-                // 'unique:system_users,email',
-
-                // Option B (unique per site):
-                Rule::unique('system_users', 'email')->where(fn($q) => $q->where('site_id', $site->id)),
-            ],
-
-            'phone' => 'required|string|max:30',
-            'position' => 'required|string|max:255',
-            'city' => 'required|string|max:255',
-            'country' => 'required|string|max:255',
-            'brand_id' => 'required',
-            'shop_name' => 'nullable',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 422,
-                'message' => 'Validation error',
-                'data' => $validator->errors(),
-            ], 422);
-        }
-
-        $validated = $validator->validated();
-        $email = $validated['email'];
-
-        $allowedDomains = [
-            'fisctrack.com', 'simbisa.co.zw', 'zw-simbisa.com', 'simbisabrands.com', 'simbisa.com'
-        ];
-        $emailDomain = strtolower(substr(strrchr($email, "@"), 1));
-
-        if (!in_array($emailDomain, $allowedDomains, true)) {
-            return response()->json([
-                'status' => 403,
-                'message' => "Registration restricted to authorized domains only. email domain '$emailDomain' is not allowed.",
-                'error' => "Email domain '$emailDomain' is not allowed.",
-            ], 403);
-        }
-
-        try {
-            $plainPassword = Str::password(10);
-
-            $newSystemUser = DB::transaction(function () use ($validated, $site, $email, $plainPassword) {
-                $user = new SystemUser();
-                $user->full_name = $validated['full_name'];
-
-                $user->email = $email;
-                $user->password = Hash::make($plainPassword);
-
-                // Defaults for self-registration
-                $user->role_id = "820c763c-fc35-11f0-b863-5cb47e66ef03";
-                $user->designation_id = "019c03ad-fcc8-724a-978f-8228b330b833";
-                $user->department_id = "019c03a4-cd68-72fd-9671-7324c5459a86";
-
-                $user->site_id = $site->id;
-                $user->save();
-
-                $other = new OtherUserInfo();
-                $other->user_id = $user->id;
-                $other->phone = $validated['phone'];
-                $other->position = $validated['position'];
-                $other->city = $validated['city'];
-                $other->country = $validated['country'];
-                $other->brand_id = $validated['brand_id'];
-                $other->shop_name = $validated['shop_name'];
-                $other->save();
-
-                return $user;
-            });
-
-            $subject = "Welcome to Simbisa Portal — Your Account Details";
-            $body = view('authentication::welcom', [
-                'user' => $newSystemUser,
-                'password' => $plainPassword,
-            ])->render();
-
-            $this->sendGraphEmail(
-                env('MSGRAPH_FROM_ADDRESS'),
-                $newSystemUser->email,
-                $subject,
-                $body
-            );
-
-            // Optional: don’t issue token here; require login using emailed password.
-            $token = $newSystemUser->createToken($newSystemUser->email . 'Auth-Token')->plainTextToken;
-
-            return response()->json([
-                'message' => 'Registration successful. Please check your email for login credentials.',
-                'token_type' => 'Bearer',
-                'token' => $token,
-            ], 200);
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'message' => 'Something went wrong while registering the user.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
+//    public function selfRegisterUser(Request $request)
+//    {
+//        $site = app('site');
+//
+//        $validator = Validator::make($request->all(), [
+//            'full_name' => 'required|string|max:255',
+//
+//
+//            'email' => [
+//                'required', 'string', 'email', 'max:255',
+//                // Option A (global unique):
+//                // 'unique:system_users,email',
+//
+//                // Option B (unique per site):
+//                Rule::unique('system_users', 'email')->where(fn($q) => $q->where('site_id', $site->id)),
+//            ],
+//
+//            'phone' => 'required|string|max:30',
+//            'position' => 'required|string|max:255',
+//            'city' => 'required|string|max:255',
+//            'country' => 'required|string|max:255',
+//            'brand_id' => 'required',
+//            'shop_name' => 'nullable',
+//        ]);
+//
+//        if ($validator->fails()) {
+//            return response()->json([
+//                'status' => 422,
+//                'message' => 'Validation error',
+//                'data' => $validator->errors(),
+//            ], 422);
+//        }
+//
+//        $validated = $validator->validated();
+//        $email = $validated['email'];
+//
+//        $allowedDomains = [
+//            'fisctrack.com', 'simbisa.co.zw', 'zw-simbisa.com', 'simbisabrands.com', 'simbisa.com'
+//        ];
+//        $emailDomain = strtolower(substr(strrchr($email, "@"), 1));
+//
+//        if (!in_array($emailDomain, $allowedDomains, true)) {
+//            return response()->json([
+//                'status' => 403,
+//                'message' => "Registration restricted to authorized domains only. email domain '$emailDomain' is not allowed.",
+//                'error' => "Email domain '$emailDomain' is not allowed.",
+//            ], 403);
+//        }
+//
+//        try {
+//            $plainPassword = Str::password(10);
+//
+//            $newSystemUser = DB::transaction(function () use ($validated, $site, $email, $plainPassword) {
+//                $user = new SystemUser();
+//                $user->full_name = $validated['full_name'];
+//
+//                $user->email = $email;
+//                $user->password = Hash::make($plainPassword);
+//
+//                // Defaults for self-registration
+//                $user->role_id = "820c763c-fc35-11f0-b863-5cb47e66ef03";
+//                $user->designation_id = "019c03ad-fcc8-724a-978f-8228b330b833";
+//                $user->department_id = "019c03a4-cd68-72fd-9671-7324c5459a86";
+//
+//                $user->site_id = $site->id;
+//                $user->save();
+//
+//                $other = new OtherUserInfo();
+//                $other->user_id = $user->id;
+//                $other->phone = $validated['phone'];
+//                $other->position = $validated['position'];
+//                $other->city = $validated['city'];
+//                $other->country = $validated['country'];
+//                $other->brand_id = $validated['brand_id'];
+//                $other->shop_name = $validated['shop_name'];
+//                $other->save();
+//
+//                return $user;
+//            });
+//
+//            $subject = "Welcome to Simbisa Portal — Your Account Details";
+//            $body = view('authentication::welcom', [
+//                'user' => $newSystemUser,
+//                'password' => $plainPassword,
+//            ])->render();
+//
+//            $this->sendGraphEmail(
+//                env('MSGRAPH_FROM_ADDRESS'),
+//                $newSystemUser->email,
+//                $subject,
+//                $body
+//            );
+//
+//            // Optional: don’t issue token here; require login using emailed password.
+//            $token = $newSystemUser->createToken($newSystemUser->email . 'Auth-Token')->plainTextToken;
+//
+//            return response()->json([
+//                'message' => 'Registration successful. Please check your email for login credentials.',
+//                'token_type' => 'Bearer',
+//                'token' => $token,
+//            ], 200);
+//
+//        } catch (\Throwable $e) {
+//            return response()->json([
+//                'message' => 'Something went wrong while registering the user.',
+//                'error' => $e->getMessage(),
+//            ], 500);
+//        }
+//    }
 
 
 
@@ -719,6 +1251,61 @@ class AuthenticationController extends Controller
     }
 
 
+//    public function login(Request $request)
+//    {
+//        $site = app('site');
+//
+//        $validator = Validator::make($request->all(), [
+//            'email'    => ['required', 'string', 'email'],
+//            'password' => ['required', 'string'],
+//        ]);
+//
+//        if ($validator->fails()) {
+//            return response()->json([
+//                'status'  => 'error',
+//                'message' => 'Validation error',
+//                'data'    => $validator->errors(),
+//            ], 422);
+//        }
+//
+//        $user = SystemUser::where('email', $request->email)
+//            ->where('site_id', $site->id)
+//            ->with([
+//                'otherInfo' => function ($query) {
+//                    $query->with(['country','brand']);
+//                },
+//                'department',
+//                'designation',
+//                'role',
+//                'brandOffice'=> function ($query) {
+//                $query->with(['brand','office']);
+//                }
+//            ])
+//            ->first();
+//
+//        if (!$user || !Hash::check($request->password, $user->password)) {
+//            return response()->json([
+//                'status'  => 'error',
+//                'message' => 'Invalid email or password',
+//            ], 401);
+//        }
+//
+//        // revoke old tokens (only if you want "1 device/session at a time")
+//        $user->tokens()->delete();
+//
+//        $tokenName = $user->email . '-Auth-Token';
+//        // optional abilities: ['*'] or ['fees:read', 'fees:write']
+//        $token = $user->createToken($tokenName)->plainTextToken;
+//
+//        return response()->json([
+//            'status'     => 'success',
+//            'message'    => 'Login successful',
+//            'token_type' => 'Bearer',
+//            'token'      => $token,
+//            'user'       => $user->makeHidden(['password']),
+//        ], 200);
+//    }
+
     public function login(Request $request)
     {
         $site = app('site');
@@ -740,14 +1327,14 @@ class AuthenticationController extends Controller
             ->where('site_id', $site->id)
             ->with([
                 'otherInfo' => function ($query) {
-                    $query->with(['country','brand']);
+                    $query->with(['country', 'brand']);
                 },
                 'department',
                 'designation',
                 'role',
-                'brandOffice'=> function ($query) {
-                $query->with(['brand','office']);
-                }
+                'brandOffice' => function ($query) {
+                    $query->with(['brand', 'office']);
+                },
             ])
             ->first();
 
@@ -758,11 +1345,42 @@ class AuthenticationController extends Controller
             ], 401);
         }
 
-        // revoke old tokens (only if you want "1 device/session at a time")
+        /*
+        |--------------------------------------------------------------------------
+        | Block login if account password setup is not completed
+        |--------------------------------------------------------------------------
+        | Admin-created users receive a password setup email link.
+        | Until they complete that link, they should not be allowed to log in.
+        */
+        if ($user->password_setup_token && !$user->password_setup_completed_at) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Please set your password using the setup link sent to your email before logging in.',
+            ], 403);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Optional: block expired setup accounts
+        |--------------------------------------------------------------------------
+        | This makes the message clearer if the user tries logging in with a
+        | temporary/generated password after the setup link has expired.
+        */
+        if (
+            $user->password_setup_expires_at &&
+            now()->greaterThan($user->password_setup_expires_at) &&
+            !$user->password_setup_completed_at
+        ) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Your password setup link has expired. Please contact your administrator for a new setup link.',
+            ], 403);
+        }
+
+        // Revoke old tokens if you want one active session at a time.
         $user->tokens()->delete();
 
         $tokenName = $user->email . '-Auth-Token';
-        // optional abilities: ['*'] or ['fees:read', 'fees:write']
         $token = $user->createToken($tokenName)->plainTextToken;
 
         return response()->json([
@@ -770,7 +1388,10 @@ class AuthenticationController extends Controller
             'message'    => 'Login successful',
             'token_type' => 'Bearer',
             'token'      => $token,
-            'user'       => $user->makeHidden(['password']),
+            'user'       => $user->makeHidden([
+                'password',
+                'password_setup_token',
+            ]),
         ], 200);
     }
 
