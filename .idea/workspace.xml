@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="latest commit">
+    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="going to vps">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Models/SystemUser.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Models/SystemUser.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/routes/web.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/routes/web.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/routes/api.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -261,7 +257,8 @@
       <workItem from="1776670087736" duration="594000" />
       <workItem from="1778052353467" duration="1682000" />
       <workItem from="1779089087388" duration="5942000" />
-      <workItem from="1779433178239" duration="10703000" />
+      <workItem from="1779433178239" duration="17121000" />
+      <workItem from="1780390724179" duration="2569000" />
     </task>
     <task id="LOCAL-00001" summary="test">
       <option name="closed" value="true" />
@@ -319,7 +316,15 @@
       <option name="project" value="LOCAL" />
       <updated>1779433763081</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="going to vps">
+      <option name="closed" value="true" />
+      <created>1779453937016</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1779453937016</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -331,7 +336,8 @@
     <MESSAGE value="test 3" />
     <MESSAGE value="initial commit" />
     <MESSAGE value="latest commit" />
-    <option name="LAST_COMMIT_MESSAGE" value="latest commit" />
+    <MESSAGE value="going to vps" />
+    <option name="LAST_COMMIT_MESSAGE" value="going to vps" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -365,7 +371,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php</url>
-          <line>366</line>
+          <line>794</line>
           <properties>
             <option name="className" value="\Modules\RiskDepertment\Http\Controllers\ReportController" />
             <option name="methodName" value="getFinancialLoss" />
