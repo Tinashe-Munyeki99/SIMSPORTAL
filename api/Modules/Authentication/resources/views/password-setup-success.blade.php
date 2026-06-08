@@ -13,6 +13,22 @@
         .head h1 { margin: 0; font-size: 20px; line-height: 28px; }
         .body { padding: 24px; }
         p { margin: 0 0 14px; font-size: 14px; line-height: 22px; color: #374151; }
+
+        .btn {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 12px 18px;
+            background: #065f46;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            background: #047857;
+        }
     </style>
 </head>
 <body>
@@ -24,6 +40,10 @@
         <div class="body">
             <p>Hello {{ $user->full_name }}, your password has been saved successfully.</p>
             <p>You can now return to the portal and log in with your email and new password.</p>
+
+            <a href="https://simconnect.simbisabrands.com" class="btn">
+                Go to SimConnect Portal
+            </a>
         </div>
     </div>
 </div>
