@@ -702,7 +702,7 @@ class AuthenticationController extends Controller
                 'expiresAt' => $expiresAt,
             ])->render();
 
-            $fromAddress = config('services.msgraph.from_address');
+            $fromAddress = config('services.msgraph2.from_address');
 
             if (!$fromAddress) {
                 throw new \Exception('MSGRAPH_FROM_ADDRESS is not configured.');
@@ -1230,9 +1230,9 @@ class AuthenticationController extends Controller
 
     private function getAccessToken()
     {
-        $tenantId = env('MSGRAPH_TENANT_ID');
-        $clientId = env('MSGRAPH_CLIENT_ID');
-        $clientSecret = env('MSGRAPH_CLIENT_SECRET');
+        $tenantId = env('MSGRAPH_CLIENT_ID2');
+        $clientId = env('MSGRAPH_TENANT_ID2');
+        $clientSecret = env('MSGRAPH_CLIENT_SECRET2');
 
         $url = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
 
@@ -1251,60 +1251,7 @@ class AuthenticationController extends Controller
     }
 
 
-//    public function login(Request $request)
-//    {
-//        $site = app('site');
-//
-//        $validator = Validator::make($request->all(), [
-//            'email'    => ['required', 'string', 'email'],
-//            'password' => ['required', 'string'],
-//        ]);
-//
-//        if ($validator->fails()) {
-//            return response()->json([
-//                'status'  => 'error',
-//                'message' => 'Validation error',
-//                'data'    => $validator->errors(),
-//            ], 422);
-//        }
-//
-//        $user = SystemUser::where('email', $request->email)
-//            ->where('site_id', $site->id)
-//            ->with([
-//                'otherInfo' => function ($query) {
-//                    $query->with(['country','brand']);
-//                },
-//                'department',
-//                'designation',
-//                'role',
-//                'brandOffice'=> function ($query) {
-//                $query->with(['brand','office']);
-//                }
-//            ])
-//            ->first();
-//
-//        if (!$user || !Hash::check($request->password, $user->password)) {
-//            return response()->json([
-//                'status'  => 'error',
-//                'message' => 'Invalid email or password',
-//            ], 401);
-//        }
-//
-//        // revoke old tokens (only if you want "1 device/session at a time")
-//        $user->tokens()->delete();
-//
-//        $tokenName = $user->email . '-Auth-Token';
-//        // optional abilities: ['*'] or ['fees:read', 'fees:write']
-//        $token = $user->createToken($tokenName)->plainTextToken;
-//
-//        return response()->json([
-//            'status'     => 'success',
-//            'message'    => 'Login successful',
-//            'token_type' => 'Bearer',
-//            'token'      => $token,
-//            'user'       => $user->makeHidden(['password']),
-//        ], 200);
-//    }
+
 
     public function login(Request $request)
     {
