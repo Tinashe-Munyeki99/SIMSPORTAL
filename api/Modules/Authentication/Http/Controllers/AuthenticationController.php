@@ -690,9 +690,7 @@ class AuthenticationController extends Controller
                 return $user;
             });
 
-            $setupUrl = route('auth.password.setup.form', [
-                'token' => $setupToken,
-            ]);
+            $setupUrl = rtrim(config('app.backend_url'), '/') . '/setup-password/' . $setupToken;
 
             $subject = 'Welcome to SimConnect — Set Your Password';
 

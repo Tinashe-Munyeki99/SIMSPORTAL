@@ -118,6 +118,7 @@ return [
     | Supported drivers: "file", "cache"
     |
     */
+    'backend_url' => env('BACKEND_URL', env('APP_URL')),
 
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
