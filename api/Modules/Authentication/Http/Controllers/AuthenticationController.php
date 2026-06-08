@@ -716,6 +716,7 @@ class AuthenticationController extends Controller
             );
 
             if (!$sent) {
+
                 throw new \Exception('Failed to send password setup email.');
             }
 
@@ -1182,57 +1183,123 @@ class AuthenticationController extends Controller
 
 
 
+//    private function sendGraphEmail(string $fromUser, string $toEmail, string $subject, string $body)
+//    {
+//        try {
+//            $accessToken = $this->getAccessToken();
+//            $fromEmail   = $fromUser; // must exist in your Microsoft 365 tenant
+//
+//            $payload = [
+//                'message' => [
+//                    'subject' => $subject,
+//                    'body' => [
+//                        'contentType' => 'HTML', // ✅ very important for HTML formatting
+//                        'content' => $body,      // ✅ do NOT escape or nl2br
+//                    ],
+//                    'toRecipients' => [
+//                        [
+//                            'emailAddress' => ['address' => $toEmail],
+//                        ],
+//                    ],
+//                ],
+//                'saveToSentItems' => true,
+//            ];
+//
+//            // Log the outgoing body (optional for debugging)
+//            Log::info("Sending Graph email to {$toEmail}");
+//
+//            $response = Http::withToken($accessToken)
+//                ->post("https://graph.microsoft.com/v1.0/users/{$fromEmail}/sendMail", $payload);
+//
+//            Log::info('Graph API sendMail response', [
+//                'status' => $response->status(),
+//                'body'   => $response->body(),
+//            ]);
+//
+//            if ($response->failed()) {
+//                throw new \Exception("Graph API error: " . $response->body());
+//            }
+//
+//            return true;
+//
+//        } catch (\Exception $e) {
+//            Log::error("Microsoft Graph email failed: " . $e->getMessage());
+//            return false;
+//        }
+//    }
     private function sendGraphEmail(string $fromUser, string $toEmail, string $subject, string $body)
     {
         try {
+            Log::info('Graph email: starting send', [
+                'from' => $fromUser,
+                'to' => $toEmail,
+                'subject' => $subject,
+            ]);
+
             $accessToken = $this->getAccessToken();
-            $fromEmail   = $fromUser; // must exist in your Microsoft 365 tenant
+
+            Log::info('Graph email: access token received');
 
             $payload = [
                 'message' => [
                     'subject' => $subject,
                     'body' => [
-                        'contentType' => 'HTML', // ✅ very important for HTML formatting
-                        'content' => $body,      // ✅ do NOT escape or nl2br
+                        'contentType' => 'HTML',
+                        'content' => $body,
                     ],
                     'toRecipients' => [
                         [
-                            'emailAddress' => ['address' => $toEmail],
+                            'emailAddress' => [
+                                'address' => $toEmail,
+                            ],
                         ],
                     ],
                 ],
                 'saveToSentItems' => true,
             ];
 
-            // Log the outgoing body (optional for debugging)
-            Log::info("Sending Graph email to {$toEmail}");
+            $url = "https://graph.microsoft.com/v1.0/users/{$fromUser}/sendMail";
+
+            Log::info('Graph email: sending request', [
+                'url' => $url,
+            ]);
 
             $response = Http::withToken($accessToken)
-                ->post("https://graph.microsoft.com/v1.0/users/{$fromEmail}/sendMail", $payload);
+                ->post($url, $payload);
 
-            Log::info('Graph API sendMail response', [
+            Log::info('Graph email: response received', [
                 'status' => $response->status(),
-                'body'   => $response->body(),
+                'body' => $response->body(),
             ]);
 
             if ($response->failed()) {
-                throw new \Exception("Graph API error: " . $response->body());
+                throw new \Exception(
+                    'Graph API sendMail failed. Status: ' .
+                    $response->status() .
+                    ' Body: ' .
+                    $response->body()
+                );
             }
 
             return true;
 
-        } catch (\Exception $e) {
-            Log::error("Microsoft Graph email failed: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Microsoft Graph email failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             return false;
         }
     }
 
-
     private function getAccessToken()
     {
-        $tenantId = env('MSGRAPH_CLIENT_ID2');
-        $clientId = env('MSGRAPH_TENANT_ID2');
-        $clientSecret = env('MSGRAPH_CLIENT_SECRET2');
+        $tenantId = config('services.msgraph2.tenant_id');
+        $clientId = config('services.msgraph2.client_id');
+        $clientSecret = config('services.msgraph2.client_secret');
 
         $url = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
 
