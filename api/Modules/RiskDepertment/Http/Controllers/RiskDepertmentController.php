@@ -725,7 +725,8 @@ class RiskDepertmentController extends Controller
             . "Date: {$incidentDate}\n\n"
             . "Summary:\n"
             . "{$summary}\n\n"
-            . "Please review the incident in the system.";
+            . "Please review the incident in the system.\n\n"
+            . "Login here: https://simconnect.simbisabrands.com/admin/login";
 
         $ok = $this->sendGraphEmailWithAttachmentDomainAware(
             $senderEmail,
