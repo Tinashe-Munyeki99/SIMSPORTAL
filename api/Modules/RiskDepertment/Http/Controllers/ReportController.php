@@ -22,7 +22,471 @@ class ReportController extends Controller
      * Display a listing of the resource.
      */
 
+    public function getIncidentByType(Request $request)
+    {
+        $site = app('site');
+        $user = auth()->user();
 
+        $tz = $request->input('tz', config('app.timezone', 'UTC'));
+        $now = Carbon::now($tz);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Date range
+        |--------------------------------------------------------------------------
+        */
+        $startDateInput = $request->input('start_date');
+        $endDateInput = $request->input('end_date');
+
+        if (!empty($startDateInput) && !empty($endDateInput)) {
+            $start = Carbon::parse($startDateInput, $tz)->startOfDay();
+            $end = Carbon::parse($endDateInput, $tz)->endOfDay();
+
+            if ($start->gt($end)) {
+                return response()->json([
+                    'message' => 'Start date cannot be after end date.',
+                ], 422);
+            }
+
+            $weeks = max(1, $start->copy()->startOfWeek(Carbon::MONDAY)->diffInWeeks(
+                    $end->copy()->startOfWeek(Carbon::MONDAY)
+                ) + 1);
+        } else {
+            $weeks = (int) $request->input('weeks', 8);
+
+            if ($weeks < 1) {
+                $weeks = 1;
+            }
+
+            if ($weeks > 52) {
+                $weeks = 52;
+            }
+
+            $end = Carbon::now($tz)->endOfDay();
+            $start = Carbon::now($tz)
+                ->subWeeks($weeks - 1)
+                ->startOfWeek(Carbon::MONDAY)
+                ->startOfDay();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | User role check
+        |--------------------------------------------------------------------------
+        */
+        $isSuperAdmin = (
+            strtolower((string) ($user->role->name ?? '')) === 'super admin'
+            || (bool) ($user->is_super_admin ?? false)
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Explicit week buckets
+        |--------------------------------------------------------------------------
+        */
+        $weekStarts = [];
+        $cursor = $start->copy()->startOfWeek(Carbon::MONDAY);
+        $endWeek = $end->copy()->startOfWeek(Carbon::MONDAY);
+
+        while ($cursor->lte($endWeek)) {
+            $weekStarts[] = $cursor->format('Y-m-d');
+            $cursor->addWeek();
+        }
+
+        $currentWeekStart = Carbon::now($tz)
+            ->startOfWeek(Carbon::MONDAY)
+            ->format('Y-m-d');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Status groups
+        |--------------------------------------------------------------------------
+        */
+        $closedStatuses = ['closed', 'resolved', 'rejected'];
+        $newStatuses = ['submitted', 'under_review', 'investigating'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | User brand / office mappings
+        |--------------------------------------------------------------------------
+        */
+        $brandIds = BrandOfficeManagement::where('user_id', $user->id)
+            ->whereNotNull('brand_id')
+            ->pluck('brand_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $officeIds = BrandOfficeManagement::where('user_id', $user->id)
+            ->whereNotNull('office_id')
+            ->pluck('office_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $userCountryId = optional($user->otherInfo)->country;
+
+        /*
+        |--------------------------------------------------------------------------
+        | Visibility scoped base query
+        |--------------------------------------------------------------------------
+        */
+        $visibleBase = IncidentReport::query()
+            ->where('site_id', $site->id);
+
+        if (!$isSuperAdmin) {
+            if (empty($brandIds) && empty($officeIds)) {
+                $visibleBase->whereRaw('1=0');
+            } else {
+                $visibleBase->where(function ($sub) use ($brandIds, $officeIds) {
+                    $hasAny = false;
+
+                    if (!empty($brandIds)) {
+                        $sub->whereIn('brand_id', $brandIds);
+                        $hasAny = true;
+                    }
+
+                    if (!empty($officeIds)) {
+                        if ($hasAny) {
+                            /*
+                             * If your incidents table has office_id, change this to:
+                             * $sub->orWhereIn('office_id', $officeIds);
+                             */
+                            $sub->orWhereIn('brand_id', $officeIds);
+                        } else {
+                            /*
+                             * If your incidents table has office_id, change this to:
+                             * $sub->whereIn('office_id', $officeIds);
+                             */
+                            $sub->whereIn('brand_id', $officeIds);
+                        }
+                    }
+                });
+            }
+
+            if (!empty($userCountryId)) {
+                $visibleBase->where('country_id', $userCountryId);
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Base query limited by selected created_at range
+        |--------------------------------------------------------------------------
+        */
+        $baseCreated = (clone $visibleBase)
+            ->whereBetween('created_at', [$start, $end]);
+
+        $weekKeyCreated = "DATE_FORMAT(DATE_SUB(DATE(created_at), INTERVAL WEEKDAY(DATE(created_at)) DAY), '%Y-%m-%d')";
+        $weekKeyUpdated = "DATE_FORMAT(DATE_SUB(DATE(updated_at), INTERVAL WEEKDAY(DATE(updated_at)) DAY), '%Y-%m-%d')";
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1. Weekly incidents by type
+        |--------------------------------------------------------------------------
+        */
+        $weeklyByTypeRaw = (clone $baseCreated)
+            ->selectRaw("$weekKeyCreated as week_start")
+            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('week_start', 'incident_type')
+            ->orderBy('week_start')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2. Totals by type
+        |--------------------------------------------------------------------------
+        */
+        $totalsByType = (clone $baseCreated)
+            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('incident_type')
+            ->orderByDesc('total')
+            ->get();
+
+        $totalIncidents = (clone $baseCreated)->count();
+
+        $shares = $totalsByType->map(function ($row) use ($totalIncidents) {
+            $count = (int) $row->total;
+
+            return [
+                'incident_type' => $row->incident_type,
+                'count' => $count,
+                'share_percent' => $totalIncidents > 0
+                    ? round(($count / $totalIncidents) * 100, 2)
+                    : 0,
+            ];
+        })->values();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 3. KPIs based on selected date range
+        |--------------------------------------------------------------------------
+        */
+        $closedCount = (clone $baseCreated)
+            ->whereIn('status', $closedStatuses)
+            ->count();
+
+        $newCount = (clone $baseCreated)
+            ->whereIn('status', $newStatuses)
+            ->count();
+
+        $openCount = (clone $baseCreated)
+            ->whereNotIn('status', $closedStatuses)
+            ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 3B. Overdue unresolved incidents
+        |--------------------------------------------------------------------------
+        | Important:
+        | This is NOT based on selected dashboard date range.
+        | It always checks all visible incidents.
+        |--------------------------------------------------------------------------
+        */
+        $overdueUnresolvedCount = (clone $visibleBase)
+            ->whereNotIn('status', $closedStatuses)
+            ->whereExists(function ($sub) use ($now) {
+                $sub->select(DB::raw(1))
+                    ->from('incident_types')
+                    ->whereColumn('incident_types.name', 'incident_reports.incident_type')
+                    ->where('incident_types.expected_close_minutes', '>', 0)
+                    ->whereRaw(
+                        'TIMESTAMPDIFF(MINUTE, incident_reports.created_at, ?) > incident_types.expected_close_minutes',
+                        [$now->toDateTimeString()]
+                    );
+            })
+            ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 4. Weekly totals
+        |--------------------------------------------------------------------------
+        */
+        $weeklyTotalsRaw = (clone $baseCreated)
+            ->selectRaw("$weekKeyCreated as week_start")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('week_start')
+            ->orderBy('week_start')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 5. Weekly closed by updated_at
+        |--------------------------------------------------------------------------
+        */
+        $weeklyClosedRaw = (clone $visibleBase)
+            ->whereIn('status', $closedStatuses)
+            ->whereBetween('updated_at', [$start, $end])
+            ->selectRaw("$weekKeyUpdated as week_start")
+            ->selectRaw("COUNT(*) as closed")
+            ->groupBy('week_start')
+            ->orderBy('week_start')
+            ->get();
+
+        $weeklyTotalsMap = $weeklyTotalsRaw->keyBy('week_start');
+        $weeklyClosedMap = $weeklyClosedRaw->keyBy('week_start');
+
+        $weeklyTotals = collect($weekStarts)->map(function ($w) use ($weeklyTotalsMap) {
+            return [
+                'week_start' => $w,
+                'total' => (int) ($weeklyTotalsMap[$w]->total ?? 0),
+            ];
+        })->values();
+
+        $weeklyClosed = collect($weekStarts)->map(function ($w) use ($weeklyClosedMap) {
+            return [
+                'week_start' => $w,
+                'closed' => (int) ($weeklyClosedMap[$w]->closed ?? 0),
+            ];
+        })->values();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 6. Top types
+        |--------------------------------------------------------------------------
+        */
+        $topTypes = $totalsByType->take(5)->values()->map(fn ($r) => [
+            'incident_type' => $r->incident_type,
+            'count' => (int) $r->total,
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | 7. Country analytics
+        |--------------------------------------------------------------------------
+        */
+        $totalsByCountry = (clone $baseCreated)
+            ->selectRaw("country_id")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('country_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $countryIds = $totalsByCountry
+            ->pluck('country_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $countryMap = [];
+
+        if (!empty($countryIds)) {
+            $countryMap = Country::whereIn('id', $countryIds)
+                ->pluck('name', 'id')
+                ->toArray();
+        }
+
+        $countryShare = $totalsByCountry->map(function ($row) use ($countryMap, $totalIncidents) {
+            $count = (int) $row->total;
+
+            return [
+                'country_id' => $row->country_id,
+                'country' => $countryMap[$row->country_id] ?? 'Unknown',
+                'count' => $count,
+                'share_percent' => $totalIncidents > 0
+                    ? round(($count / $totalIncidents) * 100, 2)
+                    : 0,
+            ];
+        })->values();
+
+        $topCountry = $countryShare->first();
+
+        $weeklyByCountryRaw = (clone $baseCreated)
+            ->selectRaw("$weekKeyCreated as week_start")
+            ->selectRaw("country_id")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('week_start', 'country_id')
+            ->orderBy('week_start')
+            ->get();
+
+        $weeklyByCountry = collect();
+
+        foreach ($countryIds as $cid) {
+            $map = $weeklyByCountryRaw
+                ->where('country_id', $cid)
+                ->keyBy('week_start');
+
+            foreach ($weekStarts as $w) {
+                $weeklyByCountry->push([
+                    'week_start' => $w,
+                    'country_id' => $cid,
+                    'country' => $countryMap[$cid] ?? 'Unknown',
+                    'total' => (int) ($map[$w]->total ?? 0),
+                ]);
+            }
+        }
+
+        $countryTypeMatrixRaw = (clone $baseCreated)
+            ->selectRaw("country_id")
+            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('country_id', 'incident_type')
+            ->orderByDesc('total')
+            ->get();
+
+        $countryTypeMatrix = $countryTypeMatrixRaw->map(function ($row) use ($countryMap) {
+            return [
+                'country_id' => $row->country_id,
+                'country' => $countryMap[$row->country_id] ?? 'Unknown',
+                'incident_type' => $row->incident_type,
+                'count' => (int) $row->total,
+            ];
+        })->values();
+
+        /*
+        |--------------------------------------------------------------------------
+        | 8. Brand analytics
+        |--------------------------------------------------------------------------
+        */
+        $totalsByBrand = (clone $baseCreated)
+            ->selectRaw("brand_id")
+            ->selectRaw("COUNT(*) as total")
+            ->groupBy('brand_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $brandIdsFound = $totalsByBrand
+            ->pluck('brand_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $brandMap = [];
+
+        if (!empty($brandIdsFound)) {
+            $brandMap = Brand::whereIn('id', $brandIdsFound)
+                ->pluck('name', 'id')
+                ->toArray();
+        }
+
+        $brandShare = $totalsByBrand->map(function ($row) use ($brandMap, $totalIncidents) {
+            $count = (int) $row->total;
+
+            return [
+                'brand_id' => $row->brand_id,
+                'brand' => $brandMap[$row->brand_id] ?? 'Unknown',
+                'count' => $count,
+                'share_percent' => $totalIncidents > 0
+                    ? round(($count / $totalIncidents) * 100, 2)
+                    : 0,
+            ];
+        })->values();
+
+        return response()->json([
+            'meta' => [
+                'site_id' => $site->id,
+                'weeks' => $weeks,
+                'timezone' => $tz,
+                'is_super_admin' => $isSuperAdmin,
+                'visible_brand_ids' => $isSuperAdmin ? [] : $brandIds,
+                'visible_office_ids' => $isSuperAdmin ? [] : $officeIds,
+                'viewer_country_id' => $isSuperAdmin ? null : $userCountryId,
+                'is_multi_country_viewer' => !$isSuperAdmin && empty($userCountryId),
+                'range' => [
+                    'start' => $start->toDateString(),
+                    'end' => $end->toDateString(),
+                    'start_datetime' => $start->toDateTimeString(),
+                    'end_datetime' => $end->toDateTimeString(),
+                ],
+                'week_buckets' => $weekStarts,
+                'current_week_start' => $currentWeekStart,
+                'status_groups' => [
+                    'closed' => $closedStatuses,
+                    'new' => $newStatuses,
+                    'open' => 'all except closed/resolved/rejected',
+                ],
+            ],
+
+            'kpis' => [
+                'total_incidents' => $totalIncidents,
+                'new_incidents' => $newCount,
+                'closed_incidents' => $closedCount,
+                'open_incidents' => $openCount,
+
+                /*
+                 * This one intentionally ignores selected date range.
+                 */
+                'overdue_unresolved_incidents' => $overdueUnresolvedCount,
+            ],
+
+            'incident_share' => $shares,
+            'weekly_by_type' => $weeklyByTypeRaw,
+            'weekly_totals' => $weeklyTotals,
+            'weekly_closed' => $weeklyClosed,
+            'top_types' => $topTypes,
+
+            'country_share' => $countryShare,
+            'top_country' => $topCountry,
+            'weekly_by_country' => $weeklyByCountry->values(),
+            'country_type_matrix' => $countryTypeMatrix,
+
+            'brand_share' => $brandShare,
+        ], 200);
+    }
 
 
 
@@ -363,435 +827,435 @@ class ReportController extends Controller
 //            'brand_share' => $brandShare,
 //        ], 200);
 //    }
-    public function getIncidentByType(Request $request)
-    {
-        $site = app('site');
-        $user = auth()->user();
-
-        $tz = $request->input('tz', config('app.timezone', 'UTC'));
-
-        /*
-        |--------------------------------------------------------------------------
-        | Date range
-        |--------------------------------------------------------------------------
-        | New dashboard sends start_date and end_date.
-        | weeks is kept as fallback for old frontend calls.
-        */
-        $startDateInput = $request->input('start_date');
-        $endDateInput = $request->input('end_date');
-
-        if (!empty($startDateInput) && !empty($endDateInput)) {
-            $start = Carbon::parse($startDateInput, $tz)->startOfDay();
-            $end = Carbon::parse($endDateInput, $tz)->endOfDay();
-
-            if ($start->gt($end)) {
-                return response()->json([
-                    'message' => 'Start date cannot be after end date.',
-                ], 422);
-            }
-
-            $weeks = max(1, $start->copy()->startOfWeek(Carbon::MONDAY)->diffInWeeks(
-                    $end->copy()->startOfWeek(Carbon::MONDAY)
-                ) + 1);
-        } else {
-            $weeks = (int) $request->input('weeks', 8);
-
-            if ($weeks < 1) {
-                $weeks = 1;
-            }
-
-            if ($weeks > 52) {
-                $weeks = 52;
-            }
-
-            $end = Carbon::now($tz)->endOfDay();
-            $start = Carbon::now($tz)
-                ->subWeeks($weeks - 1)
-                ->startOfWeek(Carbon::MONDAY)
-                ->startOfDay();
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | User role check
-        |--------------------------------------------------------------------------
-        */
-        $isSuperAdmin = (
-            strtolower((string) ($user->role->name ?? '')) === 'super admin'
-            || (bool) ($user->is_super_admin ?? false)
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | Explicit week buckets
-        |--------------------------------------------------------------------------
-        */
-        $weekStarts = [];
-        $cursor = $start->copy()->startOfWeek(Carbon::MONDAY);
-        $endWeek = $end->copy()->startOfWeek(Carbon::MONDAY);
-
-        while ($cursor->lte($endWeek)) {
-            $weekStarts[] = $cursor->format('Y-m-d');
-            $cursor->addWeek();
-        }
-
-        $currentWeekStart = Carbon::now($tz)
-            ->startOfWeek(Carbon::MONDAY)
-            ->format('Y-m-d');
-
-        /*
-        |--------------------------------------------------------------------------
-        | Status groups
-        |--------------------------------------------------------------------------
-        */
-        $closedStatuses = ['closed', 'resolved'];
-        $newStatuses = ['submitted', 'under_review', 'investigating'];
-
-        /*
-        |--------------------------------------------------------------------------
-        | User brand / office mappings
-        |--------------------------------------------------------------------------
-        */
-        $brandIds = BrandOfficeManagement::where('user_id', $user->id)
-            ->whereNotNull('brand_id')
-            ->pluck('brand_id')
-            ->unique()
-            ->values()
-            ->all();
-
-        $officeIds = BrandOfficeManagement::where('user_id', $user->id)
-            ->whereNotNull('office_id')
-            ->pluck('office_id')
-            ->unique()
-            ->values()
-            ->all();
-
-        $userCountryId = optional($user->otherInfo)->country;
-
-        /*
-        |--------------------------------------------------------------------------
-        | Visibility scoped base query
-        |--------------------------------------------------------------------------
-        */
-        $visibleBase = IncidentReport::query()
-            ->where('site_id', $site->id);
-
-        if (!$isSuperAdmin) {
-            if (empty($brandIds) && empty($officeIds)) {
-                $visibleBase->whereRaw('1=0');
-            } else {
-                $visibleBase->where(function ($sub) use ($brandIds, $officeIds) {
-                    if (!empty($brandIds)) {
-                        $sub->whereIn('brand_id', $brandIds);
-                    }
-
-                    if (!empty($officeIds)) {
-                        /*
-                         * If your incidents table has office_id, use this.
-                         * If it does not have office_id, change this back to brand_id.
-                         */
-                        $sub->orWhereIn('brand_id', $officeIds);
-                    }
-                });
-            }
-
-            if (!empty($userCountryId)) {
-                $visibleBase->where('country_id', $userCountryId);
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Base query limited by selected created_at range
-        |--------------------------------------------------------------------------
-        */
-        $baseCreated = (clone $visibleBase)
-            ->whereBetween('created_at', [$start, $end]);
-
-        $weekKeyCreated = "DATE_FORMAT(DATE_SUB(DATE(created_at), INTERVAL WEEKDAY(DATE(created_at)) DAY), '%Y-%m-%d')";
-        $weekKeyUpdated = "DATE_FORMAT(DATE_SUB(DATE(updated_at), INTERVAL WEEKDAY(DATE(updated_at)) DAY), '%Y-%m-%d')";
-
-        /*
-        |--------------------------------------------------------------------------
-        | 1. Weekly incidents by type
-        |--------------------------------------------------------------------------
-        */
-        $weeklyByTypeRaw = (clone $baseCreated)
-            ->selectRaw("$weekKeyCreated as week_start")
-            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('week_start', 'incident_type')
-            ->orderBy('week_start')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 2. Totals by type
-        |--------------------------------------------------------------------------
-        */
-        $totalsByType = (clone $baseCreated)
-            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('incident_type')
-            ->orderByDesc('total')
-            ->get();
-
-        $totalIncidents = (clone $baseCreated)->count();
-
-        $shares = $totalsByType->map(function ($row) use ($totalIncidents) {
-            $count = (int) $row->total;
-            $pct = $totalIncidents > 0
-                ? round(($count / $totalIncidents) * 100, 2)
-                : 0;
-
-            return [
-                'incident_type' => $row->incident_type,
-                'count' => $count,
-                'share_percent' => $pct,
-            ];
-        })->values();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 3. KPIs
-        |--------------------------------------------------------------------------
-        */
-        $closedCount = (clone $baseCreated)
-            ->whereIn('status', $closedStatuses)
-            ->count();
-
-        $newCount = (clone $baseCreated)
-            ->whereIn('status', $newStatuses)
-            ->count();
-
-        $openCount = (clone $baseCreated)
-            ->whereNotIn('status', $closedStatuses)
-            ->count();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 4. Weekly totals
-        |--------------------------------------------------------------------------
-        */
-        $weeklyTotalsRaw = (clone $baseCreated)
-            ->selectRaw("$weekKeyCreated as week_start")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('week_start')
-            ->orderBy('week_start')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 5. Weekly closed by updated_at
-        |--------------------------------------------------------------------------
-        */
-        $weeklyClosedRaw = (clone $visibleBase)
-            ->whereIn('status', $closedStatuses)
-            ->whereBetween('updated_at', [$start, $end])
-            ->selectRaw("$weekKeyUpdated as week_start")
-            ->selectRaw("COUNT(*) as closed")
-            ->groupBy('week_start')
-            ->orderBy('week_start')
-            ->get();
-
-        $weeklyTotalsMap = $weeklyTotalsRaw->keyBy('week_start');
-        $weeklyClosedMap = $weeklyClosedRaw->keyBy('week_start');
-
-        $weeklyTotals = collect($weekStarts)->map(function ($w) use ($weeklyTotalsMap) {
-            return [
-                'week_start' => $w,
-                'total' => (int) ($weeklyTotalsMap[$w]->total ?? 0),
-            ];
-        })->values();
-
-        $weeklyClosed = collect($weekStarts)->map(function ($w) use ($weeklyClosedMap) {
-            return [
-                'week_start' => $w,
-                'closed' => (int) ($weeklyClosedMap[$w]->closed ?? 0),
-            ];
-        })->values();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 6. Top types
-        |--------------------------------------------------------------------------
-        */
-        $topTypes = $totalsByType->take(5)->values()->map(fn ($r) => [
-            'incident_type' => $r->incident_type,
-            'count' => (int) $r->total,
-        ]);
-
-        /*
-        |--------------------------------------------------------------------------
-        | 7. Country analytics
-        |--------------------------------------------------------------------------
-        */
-        $totalsByCountry = (clone $baseCreated)
-            ->selectRaw("country_id")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('country_id')
-            ->orderByDesc('total')
-            ->get();
-
-        $countryIds = $totalsByCountry
-            ->pluck('country_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $countryMap = [];
-
-        if (!empty($countryIds)) {
-            $countryMap = Country::whereIn('id', $countryIds)
-                ->pluck('name', 'id')
-                ->toArray();
-        }
-
-        $countryShare = $totalsByCountry->map(function ($row) use ($countryMap, $totalIncidents) {
-            $count = (int) $row->total;
-            $pct = $totalIncidents > 0
-                ? round(($count / $totalIncidents) * 100, 2)
-                : 0;
-
-            return [
-                'country_id' => $row->country_id,
-                'country' => $countryMap[$row->country_id] ?? 'Unknown',
-                'count' => $count,
-                'share_percent' => $pct,
-            ];
-        })->values();
-
-        $topCountry = $countryShare->first();
-
-        $weeklyByCountryRaw = (clone $baseCreated)
-            ->selectRaw("$weekKeyCreated as week_start")
-            ->selectRaw("country_id")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('week_start', 'country_id')
-            ->orderBy('week_start')
-            ->get();
-
-        $weeklyByCountry = collect();
-
-        foreach ($countryIds as $cid) {
-            $map = $weeklyByCountryRaw
-                ->where('country_id', $cid)
-                ->keyBy('week_start');
-
-            foreach ($weekStarts as $w) {
-                $weeklyByCountry->push([
-                    'week_start' => $w,
-                    'country_id' => $cid,
-                    'country' => $countryMap[$cid] ?? 'Unknown',
-                    'total' => (int) ($map[$w]->total ?? 0),
-                ]);
-            }
-        }
-
-        $countryTypeMatrixRaw = (clone $baseCreated)
-            ->selectRaw("country_id")
-            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('country_id', 'incident_type')
-            ->orderByDesc('total')
-            ->get();
-
-        $countryTypeMatrix = $countryTypeMatrixRaw->map(function ($row) use ($countryMap) {
-            return [
-                'country_id' => $row->country_id,
-                'country' => $countryMap[$row->country_id] ?? 'Unknown',
-                'incident_type' => $row->incident_type,
-                'count' => (int) $row->total,
-            ];
-        })->values();
-
-        /*
-        |--------------------------------------------------------------------------
-        | 8. Brand analytics
-        |--------------------------------------------------------------------------
-        */
-        $totalsByBrand = (clone $baseCreated)
-            ->selectRaw("brand_id")
-            ->selectRaw("COUNT(*) as total")
-            ->groupBy('brand_id')
-            ->orderByDesc('total')
-            ->get();
-
-        $brandIdsFound = $totalsByBrand
-            ->pluck('brand_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $brandMap = [];
-
-        if (!empty($brandIdsFound)) {
-            $brandMap = Brand::whereIn('id', $brandIdsFound)
-                ->pluck('name', 'id')
-                ->toArray();
-        }
-
-        $brandShare = $totalsByBrand->map(function ($row) use ($brandMap, $totalIncidents) {
-            $count = (int) $row->total;
-            $pct = $totalIncidents > 0
-                ? round(($count / $totalIncidents) * 100, 2)
-                : 0;
-
-            return [
-                'brand_id' => $row->brand_id,
-                'brand' => $brandMap[$row->brand_id] ?? 'Unknown',
-                'count' => $count,
-                'share_percent' => $pct,
-            ];
-        })->values();
-
-        return response()->json([
-            'meta' => [
-                'site_id' => $site->id,
-                'weeks' => $weeks,
-                'timezone' => $tz,
-                'is_super_admin' => $isSuperAdmin,
-                'visible_brand_ids' => $isSuperAdmin ? [] : $brandIds,
-                'visible_office_ids' => $isSuperAdmin ? [] : $officeIds,
-                'viewer_country_id' => $isSuperAdmin ? null : $userCountryId,
-                'is_multi_country_viewer' => !$isSuperAdmin && empty($userCountryId),
-                'range' => [
-                    'start' => $start->toDateString(),
-                    'end' => $end->toDateString(),
-                    'start_datetime' => $start->toDateTimeString(),
-                    'end_datetime' => $end->toDateTimeString(),
-                ],
-                'week_buckets' => $weekStarts,
-                'current_week_start' => $currentWeekStart,
-                'status_groups' => [
-                    'closed' => $closedStatuses,
-                    'new' => $newStatuses,
-                ],
-            ],
-
-            'kpis' => [
-                'total_incidents' => $totalIncidents,
-                'new_incidents' => $newCount,
-                'closed_incidents' => $closedCount,
-                'open_incidents' => $openCount,
-            ],
-
-            'incident_share' => $shares,
-            'weekly_by_type' => $weeklyByTypeRaw,
-            'weekly_totals' => $weeklyTotals,
-            'weekly_closed' => $weeklyClosed,
-            'top_types' => $topTypes,
-
-            'country_share' => $countryShare,
-            'top_country' => $topCountry,
-            'weekly_by_country' => $weeklyByCountry->values(),
-            'country_type_matrix' => $countryTypeMatrix,
-
-            'brand_share' => $brandShare,
-        ], 200);
-    }
+//    public function getIncidentByType(Request $request)
+//    {
+//        $site = app('site');
+//        $user = auth()->user();
+//
+//        $tz = $request->input('tz', config('app.timezone', 'UTC'));
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | Date range
+//        |--------------------------------------------------------------------------
+//        | New dashboard sends start_date and end_date.
+//        | weeks is kept as fallback for old frontend calls.
+//        */
+//        $startDateInput = $request->input('start_date');
+//        $endDateInput = $request->input('end_date');
+//
+//        if (!empty($startDateInput) && !empty($endDateInput)) {
+//            $start = Carbon::parse($startDateInput, $tz)->startOfDay();
+//            $end = Carbon::parse($endDateInput, $tz)->endOfDay();
+//
+//            if ($start->gt($end)) {
+//                return response()->json([
+//                    'message' => 'Start date cannot be after end date.',
+//                ], 422);
+//            }
+//
+//            $weeks = max(1, $start->copy()->startOfWeek(Carbon::MONDAY)->diffInWeeks(
+//                    $end->copy()->startOfWeek(Carbon::MONDAY)
+//                ) + 1);
+//        } else {
+//            $weeks = (int) $request->input('weeks', 8);
+//
+//            if ($weeks < 1) {
+//                $weeks = 1;
+//            }
+//
+//            if ($weeks > 52) {
+//                $weeks = 52;
+//            }
+//
+//            $end = Carbon::now($tz)->endOfDay();
+//            $start = Carbon::now($tz)
+//                ->subWeeks($weeks - 1)
+//                ->startOfWeek(Carbon::MONDAY)
+//                ->startOfDay();
+//        }
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | User role check
+//        |--------------------------------------------------------------------------
+//        */
+//        $isSuperAdmin = (
+//            strtolower((string) ($user->role->name ?? '')) === 'super admin'
+//            || (bool) ($user->is_super_admin ?? false)
+//        );
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | Explicit week buckets
+//        |--------------------------------------------------------------------------
+//        */
+//        $weekStarts = [];
+//        $cursor = $start->copy()->startOfWeek(Carbon::MONDAY);
+//        $endWeek = $end->copy()->startOfWeek(Carbon::MONDAY);
+//
+//        while ($cursor->lte($endWeek)) {
+//            $weekStarts[] = $cursor->format('Y-m-d');
+//            $cursor->addWeek();
+//        }
+//
+//        $currentWeekStart = Carbon::now($tz)
+//            ->startOfWeek(Carbon::MONDAY)
+//            ->format('Y-m-d');
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | Status groups
+//        |--------------------------------------------------------------------------
+//        */
+//        $closedStatuses = ['closed', 'resolved'];
+//        $newStatuses = ['submitted', 'under_review', 'investigating'];
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | User brand / office mappings
+//        |--------------------------------------------------------------------------
+//        */
+//        $brandIds = BrandOfficeManagement::where('user_id', $user->id)
+//            ->whereNotNull('brand_id')
+//            ->pluck('brand_id')
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        $officeIds = BrandOfficeManagement::where('user_id', $user->id)
+//            ->whereNotNull('office_id')
+//            ->pluck('office_id')
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        $userCountryId = optional($user->otherInfo)->country;
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | Visibility scoped base query
+//        |--------------------------------------------------------------------------
+//        */
+//        $visibleBase = IncidentReport::query()
+//            ->where('site_id', $site->id);
+//
+//        if (!$isSuperAdmin) {
+//            if (empty($brandIds) && empty($officeIds)) {
+//                $visibleBase->whereRaw('1=0');
+//            } else {
+//                $visibleBase->where(function ($sub) use ($brandIds, $officeIds) {
+//                    if (!empty($brandIds)) {
+//                        $sub->whereIn('brand_id', $brandIds);
+//                    }
+//
+//                    if (!empty($officeIds)) {
+//                        /*
+//                         * If your incidents table has office_id, use this.
+//                         * If it does not have office_id, change this back to brand_id.
+//                         */
+//                        $sub->orWhereIn('brand_id', $officeIds);
+//                    }
+//                });
+//            }
+//
+//            if (!empty($userCountryId)) {
+//                $visibleBase->where('country_id', $userCountryId);
+//            }
+//        }
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | Base query limited by selected created_at range
+//        |--------------------------------------------------------------------------
+//        */
+//        $baseCreated = (clone $visibleBase)
+//            ->whereBetween('created_at', [$start, $end]);
+//
+//        $weekKeyCreated = "DATE_FORMAT(DATE_SUB(DATE(created_at), INTERVAL WEEKDAY(DATE(created_at)) DAY), '%Y-%m-%d')";
+//        $weekKeyUpdated = "DATE_FORMAT(DATE_SUB(DATE(updated_at), INTERVAL WEEKDAY(DATE(updated_at)) DAY), '%Y-%m-%d')";
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 1. Weekly incidents by type
+//        |--------------------------------------------------------------------------
+//        */
+//        $weeklyByTypeRaw = (clone $baseCreated)
+//            ->selectRaw("$weekKeyCreated as week_start")
+//            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('week_start', 'incident_type')
+//            ->orderBy('week_start')
+//            ->get();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 2. Totals by type
+//        |--------------------------------------------------------------------------
+//        */
+//        $totalsByType = (clone $baseCreated)
+//            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('incident_type')
+//            ->orderByDesc('total')
+//            ->get();
+//
+//        $totalIncidents = (clone $baseCreated)->count();
+//
+//        $shares = $totalsByType->map(function ($row) use ($totalIncidents) {
+//            $count = (int) $row->total;
+//            $pct = $totalIncidents > 0
+//                ? round(($count / $totalIncidents) * 100, 2)
+//                : 0;
+//
+//            return [
+//                'incident_type' => $row->incident_type,
+//                'count' => $count,
+//                'share_percent' => $pct,
+//            ];
+//        })->values();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 3. KPIs
+//        |--------------------------------------------------------------------------
+//        */
+//        $closedCount = (clone $baseCreated)
+//            ->whereIn('status', $closedStatuses)
+//            ->count();
+//
+//        $newCount = (clone $baseCreated)
+//            ->whereIn('status', $newStatuses)
+//            ->count();
+//
+//        $openCount = (clone $baseCreated)
+//            ->whereNotIn('status', $closedStatuses)
+//            ->count();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 4. Weekly totals
+//        |--------------------------------------------------------------------------
+//        */
+//        $weeklyTotalsRaw = (clone $baseCreated)
+//            ->selectRaw("$weekKeyCreated as week_start")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('week_start')
+//            ->orderBy('week_start')
+//            ->get();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 5. Weekly closed by updated_at
+//        |--------------------------------------------------------------------------
+//        */
+//        $weeklyClosedRaw = (clone $visibleBase)
+//            ->whereIn('status', $closedStatuses)
+//            ->whereBetween('updated_at', [$start, $end])
+//            ->selectRaw("$weekKeyUpdated as week_start")
+//            ->selectRaw("COUNT(*) as closed")
+//            ->groupBy('week_start')
+//            ->orderBy('week_start')
+//            ->get();
+//
+//        $weeklyTotalsMap = $weeklyTotalsRaw->keyBy('week_start');
+//        $weeklyClosedMap = $weeklyClosedRaw->keyBy('week_start');
+//
+//        $weeklyTotals = collect($weekStarts)->map(function ($w) use ($weeklyTotalsMap) {
+//            return [
+//                'week_start' => $w,
+//                'total' => (int) ($weeklyTotalsMap[$w]->total ?? 0),
+//            ];
+//        })->values();
+//
+//        $weeklyClosed = collect($weekStarts)->map(function ($w) use ($weeklyClosedMap) {
+//            return [
+//                'week_start' => $w,
+//                'closed' => (int) ($weeklyClosedMap[$w]->closed ?? 0),
+//            ];
+//        })->values();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 6. Top types
+//        |--------------------------------------------------------------------------
+//        */
+//        $topTypes = $totalsByType->take(5)->values()->map(fn ($r) => [
+//            'incident_type' => $r->incident_type,
+//            'count' => (int) $r->total,
+//        ]);
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 7. Country analytics
+//        |--------------------------------------------------------------------------
+//        */
+//        $totalsByCountry = (clone $baseCreated)
+//            ->selectRaw("country_id")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('country_id')
+//            ->orderByDesc('total')
+//            ->get();
+//
+//        $countryIds = $totalsByCountry
+//            ->pluck('country_id')
+//            ->filter()
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        $countryMap = [];
+//
+//        if (!empty($countryIds)) {
+//            $countryMap = Country::whereIn('id', $countryIds)
+//                ->pluck('name', 'id')
+//                ->toArray();
+//        }
+//
+//        $countryShare = $totalsByCountry->map(function ($row) use ($countryMap, $totalIncidents) {
+//            $count = (int) $row->total;
+//            $pct = $totalIncidents > 0
+//                ? round(($count / $totalIncidents) * 100, 2)
+//                : 0;
+//
+//            return [
+//                'country_id' => $row->country_id,
+//                'country' => $countryMap[$row->country_id] ?? 'Unknown',
+//                'count' => $count,
+//                'share_percent' => $pct,
+//            ];
+//        })->values();
+//
+//        $topCountry = $countryShare->first();
+//
+//        $weeklyByCountryRaw = (clone $baseCreated)
+//            ->selectRaw("$weekKeyCreated as week_start")
+//            ->selectRaw("country_id")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('week_start', 'country_id')
+//            ->orderBy('week_start')
+//            ->get();
+//
+//        $weeklyByCountry = collect();
+//
+//        foreach ($countryIds as $cid) {
+//            $map = $weeklyByCountryRaw
+//                ->where('country_id', $cid)
+//                ->keyBy('week_start');
+//
+//            foreach ($weekStarts as $w) {
+//                $weeklyByCountry->push([
+//                    'week_start' => $w,
+//                    'country_id' => $cid,
+//                    'country' => $countryMap[$cid] ?? 'Unknown',
+//                    'total' => (int) ($map[$w]->total ?? 0),
+//                ]);
+//            }
+//        }
+//
+//        $countryTypeMatrixRaw = (clone $baseCreated)
+//            ->selectRaw("country_id")
+//            ->selectRaw("COALESCE(incident_type, 'Unknown') as incident_type")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('country_id', 'incident_type')
+//            ->orderByDesc('total')
+//            ->get();
+//
+//        $countryTypeMatrix = $countryTypeMatrixRaw->map(function ($row) use ($countryMap) {
+//            return [
+//                'country_id' => $row->country_id,
+//                'country' => $countryMap[$row->country_id] ?? 'Unknown',
+//                'incident_type' => $row->incident_type,
+//                'count' => (int) $row->total,
+//            ];
+//        })->values();
+//
+//        /*
+//        |--------------------------------------------------------------------------
+//        | 8. Brand analytics
+//        |--------------------------------------------------------------------------
+//        */
+//        $totalsByBrand = (clone $baseCreated)
+//            ->selectRaw("brand_id")
+//            ->selectRaw("COUNT(*) as total")
+//            ->groupBy('brand_id')
+//            ->orderByDesc('total')
+//            ->get();
+//
+//        $brandIdsFound = $totalsByBrand
+//            ->pluck('brand_id')
+//            ->filter()
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        $brandMap = [];
+//
+//        if (!empty($brandIdsFound)) {
+//            $brandMap = Brand::whereIn('id', $brandIdsFound)
+//                ->pluck('name', 'id')
+//                ->toArray();
+//        }
+//
+//        $brandShare = $totalsByBrand->map(function ($row) use ($brandMap, $totalIncidents) {
+//            $count = (int) $row->total;
+//            $pct = $totalIncidents > 0
+//                ? round(($count / $totalIncidents) * 100, 2)
+//                : 0;
+//
+//            return [
+//                'brand_id' => $row->brand_id,
+//                'brand' => $brandMap[$row->brand_id] ?? 'Unknown',
+//                'count' => $count,
+//                'share_percent' => $pct,
+//            ];
+//        })->values();
+//
+//        return response()->json([
+//            'meta' => [
+//                'site_id' => $site->id,
+//                'weeks' => $weeks,
+//                'timezone' => $tz,
+//                'is_super_admin' => $isSuperAdmin,
+//                'visible_brand_ids' => $isSuperAdmin ? [] : $brandIds,
+//                'visible_office_ids' => $isSuperAdmin ? [] : $officeIds,
+//                'viewer_country_id' => $isSuperAdmin ? null : $userCountryId,
+//                'is_multi_country_viewer' => !$isSuperAdmin && empty($userCountryId),
+//                'range' => [
+//                    'start' => $start->toDateString(),
+//                    'end' => $end->toDateString(),
+//                    'start_datetime' => $start->toDateTimeString(),
+//                    'end_datetime' => $end->toDateTimeString(),
+//                ],
+//                'week_buckets' => $weekStarts,
+//                'current_week_start' => $currentWeekStart,
+//                'status_groups' => [
+//                    'closed' => $closedStatuses,
+//                    'new' => $newStatuses,
+//                ],
+//            ],
+//
+//            'kpis' => [
+//                'total_incidents' => $totalIncidents,
+//                'new_incidents' => $newCount,
+//                'closed_incidents' => $closedCount,
+//                'open_incidents' => $openCount,
+//            ],
+//
+//            'incident_share' => $shares,
+//            'weekly_by_type' => $weeklyByTypeRaw,
+//            'weekly_totals' => $weeklyTotals,
+//            'weekly_closed' => $weeklyClosed,
+//            'top_types' => $topTypes,
+//
+//            'country_share' => $countryShare,
+//            'top_country' => $topCountry,
+//            'weekly_by_country' => $weeklyByCountry->values(),
+//            'country_type_matrix' => $countryTypeMatrix,
+//
+//            'brand_share' => $brandShare,
+//        ], 200);
+//    }
 //    public function getFinancialLoss(Request $request)
 //    {
 //        $site = app('site');

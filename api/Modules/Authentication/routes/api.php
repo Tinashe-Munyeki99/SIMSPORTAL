@@ -11,11 +11,8 @@ Route::post("/login",[AuthenticationController::class,"login"])
 Route::post("/self/registration",[AuthenticationController::class,"selfRegisterUser"])
     ->middleware(ResolveSiteFromDomain::class);
 
-Route::get("/list-countries",[AuthenticationController::class,"listCountries"])
-    ->middleware(ResolveSiteFromDomain::class);
 
-Route::get("/list-brands",[AuthenticationController::class,"listbrands"])
-    ->middleware(ResolveSiteFromDomain::class);
+
 
 
 Route::get("/list-department",[AuthenticationController::class,"listDepertments"])
@@ -29,8 +26,7 @@ Route::get("/list-designation",[AuthenticationController::class,"listDesignation
 Route::get("/list-role",[AuthenticationController::class,"listRole"])
     ->middleware(ResolveSiteFromDomain::class);
 
-Route::get("/list-office",[AuthenticationController::class,"listOffice"])
-    ->middleware(ResolveSiteFromDomain::class);
+
 
 
 
@@ -49,6 +45,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/delete-user/{id}', [AuthenticationController::class, 'deleteUser'])->middleware(ResolveSiteFromDomain::class);
 
     Route::get("/get-menu-permissions", [AuthenticationController::class, "menuPermissions"]);
+
+
+    Route::get("/list-countries",[AuthenticationController::class,"listCountries"])
+        ->middleware(ResolveSiteFromDomain::class);
+
+    Route::get("/list-brands",[AuthenticationController::class,"listbrands"])
+        ->middleware(ResolveSiteFromDomain::class);
+
+    Route::get("/list-office",[AuthenticationController::class,"listOffice"])
+        ->middleware(ResolveSiteFromDomain::class);
 
     Route::post("/register-user",
         [AuthenticationController::class, "registerUser"])

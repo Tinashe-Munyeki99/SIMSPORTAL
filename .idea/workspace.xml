@@ -6,6 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="updated email">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/routes/api.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -260,7 +263,7 @@
       <workItem from="1779433178239" duration="17121000" />
       <workItem from="1780390724179" duration="2569000" />
       <workItem from="1780472604527" duration="4501000" />
-      <workItem from="1780906797783" duration="7762000" />
+      <workItem from="1780906797783" duration="17515000" />
     </task>
     <task id="LOCAL-00001" summary="test">
       <option name="closed" value="true" />
@@ -374,7 +377,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780920649136</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="updated email">
+      <option name="closed" value="true" />
+      <created>1781001043744</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1781001043744</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -396,7 +407,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php</url>
-          <line>637</line>
+          <line>677</line>
           <properties>
             <option name="className" value="\Modules\RiskDepertment\Http\Controllers\RiskDepertmentController" />
             <option name="methodName" value="normalizeEmails" />
@@ -405,7 +416,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php</url>
-          <line>28</line>
+          <line>492</line>
           <properties>
             <option name="className" value="\Modules\RiskDepertment\Http\Controllers\ReportController" />
             <option name="methodName" value="getIncidentByType" />
@@ -414,7 +425,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php</url>
-          <line>1595</line>
+          <line>1655</line>
           <properties>
             <option name="className" value="\Modules\Authentication\Http\Controllers\AuthenticationController" />
             <option name="methodName" value="listDepertments" />
@@ -423,7 +434,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php</url>
-          <line>794</line>
+          <line>1258</line>
           <properties>
             <option name="className" value="\Modules\RiskDepertment\Http\Controllers\ReportController" />
             <option name="methodName" value="getFinancialLoss" />

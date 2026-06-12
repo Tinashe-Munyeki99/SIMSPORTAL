@@ -1578,16 +1578,76 @@ class AuthenticationController extends Controller
 
     public function listCountries(Request $request)
     {
-        $countries = Country::orderBy('name')->get();
+        $user = auth()->user();
+
+        $userCountryId = optional($user->otherInfo)->country;
+
+        $isSuperAdmin = (
+            strtolower((string)($user->role->name ?? '')) === 'super admin'
+            || (bool)($user->is_super_admin ?? false)
+        );
+
+        $query = Country::query()->orderBy('name');
+
+        /*
+         * Visibility rules:
+         * - Super Admin: all countries
+         * - Non-super admin with country_id: only their country
+         * - Non-super admin with country_id null: all countries because they are multi-country viewer
+         */
+        if (!$isSuperAdmin && !empty($userCountryId)) {
+            $query->where('id', $userCountryId);
+        }
+
+        $countries = $query->get();
 
         return response()->json([
             'data' => $countries
         ], 200);
     }
 
+//    public function listbrands(Request $request)
+//    {
+//        $brands = Brand::orderBy('name')->get();
+//
+//        return response()->json([
+//            'data' => $brands
+//        ], 200);
+//    }
+
     public function listbrands(Request $request)
     {
-        $brands = Brand::orderBy('name')->get();
+        $user = auth()->user();
+
+        $isSuperAdmin = (
+            strtolower((string)($user->role->name ?? '')) === 'super admin'
+            || (bool)($user->is_super_admin ?? false)
+        );
+
+        $query = Brand::query()->orderBy('name');
+
+        /*
+         * Visibility rules:
+         * - Super Admin: all brands
+         * - Non-super admin: only brands assigned in BrandOfficeManagement
+         */
+        if (!$isSuperAdmin) {
+            $brandIds = BrandOfficeManagement::where('user_id', $user->id)
+                ->whereNotNull('brand_id')
+                ->pluck('brand_id')
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!empty($brandIds)) {
+                $query->whereIn('id', $brandIds);
+            } else {
+                // No brand mappings means no brands should be returned
+                $query->whereRaw('1=0');
+            }
+        }
+
+        $brands = $query->get();
 
         return response()->json([
             'data' => $brands
@@ -1639,10 +1699,49 @@ class AuthenticationController extends Controller
     }
 
 
-    public function listOffice(Request $request){
-        $office = Office::orderBy('name')->get();
+//    public function listOffice(Request $request){
+//        $office = Office::orderBy('name')->get();
+//        return response()->json([
+//            'data' => $office
+//        ], 200);
+//    }
+
+    public function listOffice(Request $request)
+    {
+        $user = auth()->user();
+
+        $isSuperAdmin = (
+            strtolower((string)($user->role->name ?? '')) === 'super admin'
+            || (bool)($user->is_super_admin ?? false)
+        );
+
+        $query = Office::query()->orderBy('name');
+
+        /*
+         * Visibility rules:
+         * - Super Admin: all offices
+         * - Non-super admin: only offices assigned in BrandOfficeManagement
+         */
+        if (!$isSuperAdmin) {
+            $officeIds = BrandOfficeManagement::where('user_id', $user->id)
+                ->whereNotNull('office_id')
+                ->pluck('office_id')
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!empty($officeIds)) {
+                $query->whereIn('id', $officeIds);
+            } else {
+                // No office mappings means no offices should be returned
+                $query->whereRaw('1=0');
+            }
+        }
+
+        $offices = $query->get();
+
         return response()->json([
-            'data' => $office
+            'data' => $offices
         ], 200);
     }
 

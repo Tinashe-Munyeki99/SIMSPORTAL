@@ -31,6 +31,7 @@ use Modules\RiskDepertment\Models\IncidentSlaEvent;
 use Modules\RiskDepertment\Models\IncidentType;
 use Modules\RiskDepertment\Models\ReportStatusNotes;
 use Modules\Site\Models\GeneralCounter;
+
 use function App\Helpers\hasPermission;
 
 
@@ -58,16 +59,27 @@ class RiskDepertmentController extends Controller
         // ✅ validate request filters
         $validator = Validator::make($request->all(), [
             'status' => ['nullable', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+            'statuses' => 'nullable|array',
+            'statuses.*' => ['string', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+
+            'exclude_statuses' => 'nullable|array',
+            'exclude_statuses.*' => ['string', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+
             'severity' => ['nullable', Rule::in(['low','medium','high','critical'])],
             'incident_type' => 'nullable|string|max:100',
             'from' => 'nullable|date',
             'to' => 'nullable|date',
+            'from_date' => 'nullable|date',
+            'to_date' => 'nullable|date',
             'q' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:200',
 
             'country_id' => 'nullable|uuid',
             'brand_id' => 'nullable|uuid',
+            'office_id' => 'nullable|uuid',
             'reported_by_user_id' => 'nullable|uuid',
+
+            'overdue_unresolved' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -208,6 +220,34 @@ class RiskDepertmentController extends Controller
         // reported_by is varchar, so filter by created_by
         if ($request->filled('reported_by_user_id')) {
             $query->where('created_by', $request->reported_by_user_id);
+        }
+
+        /*
+|--------------------------------------------------------------------------
+| Dashboard card filters
+|--------------------------------------------------------------------------
+*/
+        if ($request->filled('statuses')) {
+            $query->whereIn('status', $request->input('statuses'));
+        }
+
+        if ($request->filled('exclude_statuses')) {
+            $query->whereNotIn('status', $request->input('exclude_statuses'));
+        }
+
+        if ($request->boolean('overdue_unresolved')) {
+            $closedStatusesForOverdue = ['closed', 'resolved', 'rejected'];
+
+            $query->whereNotIn('status', $closedStatusesForOverdue)
+                ->whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('incident_types')
+                        ->whereColumn('incident_types.name', 'incident_reports.incident_type')
+                        ->where('incident_types.expected_close_minutes', '>', 0)
+                        ->whereRaw(
+                            'TIMESTAMPDIFF(MINUTE, incident_reports.created_at, NOW()) > incident_types.expected_close_minutes'
+                        );
+                });
         }
 
         $perPage = (int) $request->input('per_page', 15);
@@ -1345,6 +1385,152 @@ class RiskDepertmentController extends Controller
 
 
 
+//    private function buildIncidentQuery(Request $request)
+//    {
+//        $site = app('site');
+//        $user = auth()->user();
+//        $userCountryId = optional($user->otherInfo)->country;
+//
+//        $validator = Validator::make($request->all(), [
+//            'status' => ['nullable', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+//            'severity' => ['nullable', Rule::in(['low','medium','high','critical'])],
+//            'incident_type' => 'nullable|string|max:100',
+//            'from' => 'nullable|date',
+//            'to' => 'nullable|date',
+//            'q' => 'nullable|string|max:255',
+//            'per_page' => 'nullable|integer|min:1|max:200',
+//            'country_id' => 'nullable|uuid',
+//            'brand_id' => 'nullable|uuid',
+//            'reported_by_user_id' => 'nullable|uuid',
+//        ]);
+//
+//        if ($validator->fails()) {
+//            abort(response()->json([
+//                'status' => 422,
+//                'message' => 'Validation error',
+//                'data' => $validator->errors(),
+//            ], 422));
+//        }
+//
+//        $fromInput = $request->input('from', $request->input('from_date'));
+//        $toInput   = $request->input('to',   $request->input('to_date'));
+//
+//        $query = IncidentReport::query()->where('site_id', $site->id);
+//
+//        $isSuperAdmin = (
+//            strtolower((string)($user->role->name ?? '')) === 'super admin'
+//            || (bool)($user->is_super_admin ?? false)
+//        );
+//
+//        $brandIds = BrandOfficeManagement::where('user_id', $user->id)
+//            ->whereNotNull('brand_id')
+//            ->pluck('brand_id')
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        $officeIds = BrandOfficeManagement::where('user_id', $user->id)
+//            ->whereNotNull('office_id')
+//            ->pluck('office_id')
+//            ->unique()
+//            ->values()
+//            ->all();
+//
+//        if (!$isSuperAdmin) {
+////            $query->where(function ($sub) use ($brandIds, $officeIds) {
+////                $hasAny = false;
+////
+////                if (!empty($brandIds)) {
+////                    $sub->whereIn('brand_id', $brandIds);
+////                    $hasAny = true;
+////                }
+////
+////                // ✅ correct: office visibility should match office_id column (if it exists)
+////                if (!empty($officeIds)) {
+////                    // if brand filter already applied, use OR; otherwise just whereIn
+////                    if ($hasAny) {
+////                        $sub->orWhereIn('brand_id', $officeIds);
+////                    } else {
+////                        $sub->whereIn('brand_id', $officeIds);
+////                        $hasAny = true;
+////                    }
+////                }
+////
+////                // if no mappings, this closure remains empty; handled below
+////            });
+//
+//            // ✅ If user has no mappings, return none
+////            if (empty($brandIds) && empty($officeIds)) {
+////                $query->whereRaw('1=0');
+////            }
+//
+//            $query->where(function ($sub) use ($brandIds, $officeIds) {
+//                $hasAny = false;
+//
+//                if (!empty($brandIds)) {
+//                    $sub->whereIn('brand_id', $brandIds);
+//                    $hasAny = true;
+//                }
+//
+//                if (!empty($officeIds)) {
+//                    if ($hasAny) {
+//                        $sub->orWhereIn('brand_id', $officeIds); // ✅ use office_id if column exists
+//                    } else {
+//                        $sub->whereIn('brand_id', $officeIds);
+//                        $hasAny = true;
+//                    }
+//                }
+//            });
+//
+//            // ✅ if user belongs to one country, restrict to that country
+//            if (!empty($userCountryId)) {
+//                $query->where('country_id', $userCountryId);
+//            }
+//
+//            // ✅ no mappings => no data
+//            if (empty($brandIds) && empty($officeIds)) {
+//                $query->whereRaw('1=0');
+//            }
+//        }
+//
+//        // Filters
+//        if ($request->filled('status')) $query->where('status', $request->status);
+//        if ($request->filled('severity')) $query->where('severity', $request->severity);
+//        if ($request->filled('incident_type')) $query->where('incident_type', $request->incident_type);
+//
+//        if ($request->filled('from')) $query->whereDate('incident_at', '>=', $request->from);
+//        if ($request->filled('to')) $query->whereDate('incident_at', '<=', $request->to);
+//
+//        if ($request->filled('q')) {
+//            $q = $request->q;
+//            $query->where(function ($sub) use ($q) {
+//                $sub->where('incident_number', 'like', "%{$q}%")
+//                    ->orWhere('location', 'like', "%{$q}%")
+//                    ->orWhere('division', 'like', "%{$q}%")
+//                    ->orWhere('reported_by', 'like', "%{$q}%")
+//                    ->orWhere('accused', 'like', "%{$q}%")
+//                    ->orWhere('incident_summary', 'like', "%{$q}%")
+//                    ->orWhere('root_cause', 'like', "%{$q}%");
+//            });
+//        }
+//
+//        // Range dates (support from/to and from_date/to_date)
+//        if ($fromInput && $toInput) {
+//            $from = Carbon::parse($fromInput)->startOfDay();
+//            $to   = Carbon::parse($toInput)->endOfDay();
+//            $query->whereBetween('incident_at', [$from, $to]);
+//        } elseif ($fromInput) {
+//            $query->where('incident_at', '>=', Carbon::parse($fromInput)->startOfDay());
+//        } elseif ($toInput) {
+//            $query->where('incident_at', '<=', Carbon::parse($toInput)->endOfDay());
+//        }
+//
+//        if ($request->filled('country_id')) $query->where('country_id', $request->country_id);
+//        if ($request->filled('brand_id')) $query->where('brand_id', $request->brand_id);
+//        if ($request->filled('reported_by_user_id')) $query->where('created_by', $request->reported_by_user_id);
+//
+//        return $query;
+//    }
     private function buildIncidentQuery(Request $request)
     {
         $site = app('site');
@@ -1353,14 +1539,28 @@ class RiskDepertmentController extends Controller
 
         $validator = Validator::make($request->all(), [
             'status' => ['nullable', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+
+            // Dashboard grouped status filters
+            'status_group' => ['nullable', Rule::in(['new', 'closed', 'open'])],
+            'statuses' => 'nullable|array',
+            'statuses.*' => ['string', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+            'exclude_statuses' => 'nullable|array',
+            'exclude_statuses.*' => ['string', Rule::in(['draft','submitted','under_review','investigating','resolved','closed','rejected'])],
+
+            // Dashboard overdue card filter
+            'overdue_unresolved' => 'nullable|boolean',
+
             'severity' => ['nullable', Rule::in(['low','medium','high','critical'])],
             'incident_type' => 'nullable|string|max:100',
             'from' => 'nullable|date',
             'to' => 'nullable|date',
+            'from_date' => 'nullable|date',
+            'to_date' => 'nullable|date',
             'q' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:1|max:200',
             'country_id' => 'nullable|uuid',
             'brand_id' => 'nullable|uuid',
+            'office_id' => 'nullable|uuid',
             'reported_by_user_id' => 'nullable|uuid',
         ]);
 
@@ -1372,8 +1572,23 @@ class RiskDepertmentController extends Controller
             ], 422));
         }
 
-        $fromInput = $request->input('from', $request->input('from_date'));
-        $toInput   = $request->input('to',   $request->input('to_date'));
+        $closedStatuses = ['resolved', 'closed', 'rejected'];
+        $newStatuses = ['submitted', 'under_review', 'investigating'];
+
+        $isOverdueUnresolved = $request->boolean('overdue_unresolved');
+
+        /*
+         * Support both from/to and from_date/to_date.
+         * IMPORTANT:
+         * For overdue_unresolved dashboard export, dates must be ignored.
+         */
+        $fromInput = $isOverdueUnresolved
+            ? null
+            : $request->input('from', $request->input('from_date'));
+
+        $toInput = $isOverdueUnresolved
+            ? null
+            : $request->input('to', $request->input('to_date'));
 
         $query = IncidentReport::query()->where('site_id', $site->id);
 
@@ -1397,33 +1612,6 @@ class RiskDepertmentController extends Controller
             ->all();
 
         if (!$isSuperAdmin) {
-//            $query->where(function ($sub) use ($brandIds, $officeIds) {
-//                $hasAny = false;
-//
-//                if (!empty($brandIds)) {
-//                    $sub->whereIn('brand_id', $brandIds);
-//                    $hasAny = true;
-//                }
-//
-//                // ✅ correct: office visibility should match office_id column (if it exists)
-//                if (!empty($officeIds)) {
-//                    // if brand filter already applied, use OR; otherwise just whereIn
-//                    if ($hasAny) {
-//                        $sub->orWhereIn('brand_id', $officeIds);
-//                    } else {
-//                        $sub->whereIn('brand_id', $officeIds);
-//                        $hasAny = true;
-//                    }
-//                }
-//
-//                // if no mappings, this closure remains empty; handled below
-//            });
-
-            // ✅ If user has no mappings, return none
-//            if (empty($brandIds) && empty($officeIds)) {
-//                $query->whereRaw('1=0');
-//            }
-
             $query->where(function ($sub) use ($brandIds, $officeIds) {
                 $hasAny = false;
 
@@ -1434,35 +1622,47 @@ class RiskDepertmentController extends Controller
 
                 if (!empty($officeIds)) {
                     if ($hasAny) {
-                        $sub->orWhereIn('brand_id', $officeIds); // ✅ use office_id if column exists
+                        /*
+                         * If your incidents table has office_id, change this to:
+                         * $sub->orWhereIn('office_id', $officeIds);
+                         */
+                        $sub->orWhereIn('brand_id', $officeIds);
                     } else {
+                        /*
+                         * If your incidents table has office_id, change this to:
+                         * $sub->whereIn('office_id', $officeIds);
+                         */
                         $sub->whereIn('brand_id', $officeIds);
                         $hasAny = true;
                     }
                 }
             });
 
-            // ✅ if user belongs to one country, restrict to that country
             if (!empty($userCountryId)) {
                 $query->where('country_id', $userCountryId);
             }
 
-            // ✅ no mappings => no data
             if (empty($brandIds) && empty($officeIds)) {
                 $query->whereRaw('1=0');
             }
         }
 
-        // Filters
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('severity')) $query->where('severity', $request->severity);
-        if ($request->filled('incident_type')) $query->where('incident_type', $request->incident_type);
+        /*
+        |--------------------------------------------------------------------------
+        | Normal filters
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('severity')) {
+            $query->where('severity', $request->severity);
+        }
 
-        if ($request->filled('from')) $query->whereDate('incident_at', '>=', $request->from);
-        if ($request->filled('to')) $query->whereDate('incident_at', '<=', $request->to);
+        if ($request->filled('incident_type')) {
+            $query->where('incident_type', $request->incident_type);
+        }
 
         if ($request->filled('q')) {
             $q = $request->q;
+
             $query->where(function ($sub) use ($q) {
                 $sub->where('incident_number', 'like', "%{$q}%")
                     ->orWhere('location', 'like', "%{$q}%")
@@ -1474,24 +1674,90 @@ class RiskDepertmentController extends Controller
             });
         }
 
-        // Range dates (support from/to and from_date/to_date)
-        if ($fromInput && $toInput) {
-            $from = Carbon::parse($fromInput)->startOfDay();
-            $to   = Carbon::parse($toInput)->endOfDay();
-            $query->whereBetween('incident_at', [$from, $to]);
-        } elseif ($fromInput) {
-            $query->where('incident_at', '>=', Carbon::parse($fromInput)->startOfDay());
-        } elseif ($toInput) {
-            $query->where('incident_at', '<=', Carbon::parse($toInput)->endOfDay());
+        /*
+        |--------------------------------------------------------------------------
+        | Date range filters
+        |--------------------------------------------------------------------------
+        | Skipped when overdue_unresolved=1.
+        |--------------------------------------------------------------------------
+        */
+        if (!$isOverdueUnresolved) {
+            if ($fromInput && $toInput) {
+                $from = Carbon::parse($fromInput)->startOfDay();
+                $to = Carbon::parse($toInput)->endOfDay();
+
+                $query->whereBetween('incident_at', [$from, $to]);
+            } elseif ($fromInput) {
+                $query->where('incident_at', '>=', Carbon::parse($fromInput)->startOfDay());
+            } elseif ($toInput) {
+                $query->where('incident_at', '<=', Carbon::parse($toInput)->endOfDay());
+            }
         }
 
-        if ($request->filled('country_id')) $query->where('country_id', $request->country_id);
-        if ($request->filled('brand_id')) $query->where('brand_id', $request->brand_id);
-        if ($request->filled('reported_by_user_id')) $query->where('created_by', $request->reported_by_user_id);
+        if ($request->filled('country_id')) {
+            $query->where('country_id', $request->country_id);
+        }
+
+        if ($request->filled('brand_id')) {
+            $query->where('brand_id', $request->brand_id);
+        }
+
+        if ($request->filled('office_id')) {
+            /*
+             * If your incidents table has office_id, change this to:
+             * $query->where('office_id', $request->office_id);
+             */
+            $query->where('brand_id', $request->office_id);
+        }
+
+        if ($request->filled('reported_by_user_id')) {
+            $query->where('created_by', $request->reported_by_user_id);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Dashboard status filters
+        |--------------------------------------------------------------------------
+        | Priority:
+        | 1. overdue_unresolved
+        | 2. explicit statuses / exclude_statuses
+        | 3. status_group
+        | 4. single status
+        |--------------------------------------------------------------------------
+        */
+        if ($isOverdueUnresolved) {
+            $query->whereNotIn('status', $closedStatuses)
+                ->whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('incident_types')
+                        ->whereColumn('incident_types.name', 'incident_reports.incident_type')
+                        ->where('incident_types.expected_close_minutes', '>', 0)
+                        ->whereRaw(
+                            'TIMESTAMPDIFF(MINUTE, incident_reports.created_at, NOW()) > incident_types.expected_close_minutes'
+                        );
+                });
+        } elseif ($request->filled('statuses')) {
+            $query->whereIn('status', $request->input('statuses'));
+        } elseif ($request->filled('exclude_statuses')) {
+            $query->whereNotIn('status', $request->input('exclude_statuses'));
+        } elseif ($request->filled('status_group')) {
+            if ($request->input('status_group') === 'new') {
+                $query->whereIn('status', $newStatuses);
+            }
+
+            if ($request->input('status_group') === 'closed') {
+                $query->whereIn('status', $closedStatuses);
+            }
+
+            if ($request->input('status_group') === 'open') {
+                $query->whereNotIn('status', $closedStatuses);
+            }
+        } elseif ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
 
         return $query;
     }
-
     /**
      * ✅ EXPORT: Excel/PDF with selectable columns (uses buildIncidentQuery)
      * GET /api/incident-reports/export?format=xlsx&columns[]=incident_number&columns[]=division
