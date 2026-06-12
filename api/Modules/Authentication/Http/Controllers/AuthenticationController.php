@@ -915,7 +915,16 @@ class AuthenticationController extends Controller
         $validated = $validator->validated();
 
         // Optional: same allowed domain restriction as registerUser
-        $allowedDomains = ['fisctrack.com', 'simbisa.co.zw', 'zw-simbisa.com', 'simbisabrands.com', 'simbisa.com'];
+        $allowedDomains = [
+            'fisctrack.com',
+            'simbisa.co.zw',
+            'zw-simbisa.com',
+            'simbisabrands.com',
+            'simbisa.com',
+            'za-simbisa.com',
+            'sz-simbisa.com',
+            'ke-simbisa.com',
+        ];
         $emailDomain = strtolower(substr(strrchr($validated['email'], "@"), 1));
         if (!in_array($emailDomain, $allowedDomains, true)) {
             return response()->json([

@@ -6,7 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="updated filters">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/database/seeders/BrandSeeder.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/database/seeders/BrandSeeder.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -260,7 +260,7 @@
       <workItem from="1779433178239" duration="17121000" />
       <workItem from="1780390724179" duration="2569000" />
       <workItem from="1780472604527" duration="4501000" />
-      <workItem from="1780906797783" duration="19667000" />
+      <workItem from="1780906797783" duration="20266000" />
     </task>
     <task id="LOCAL-00001" summary="test">
       <option name="closed" value="true" />
@@ -406,7 +406,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781251765736</updated>
     </task>
-    <option name="localTasksCounter" value="19" />
+    <task id="LOCAL-00019" summary="updated filters">
+      <option name="closed" value="true" />
+      <created>1781253746789</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1781253746789</updated>
+    </task>
+    <option name="localTasksCounter" value="20" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -447,7 +455,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php</url>
-          <line>1658</line>
+          <line>1667</line>
           <properties>
             <option name="className" value="\Modules\Authentication\Http\Controllers\AuthenticationController" />
             <option name="methodName" value="listDepertments" />
