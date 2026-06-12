@@ -68,6 +68,15 @@ class BrandSeeder extends Seeder
             [
                 'brand_name'        => 'HAEFELIS',
 
+            ],    [
+                'brand_name'        => 'INNS EXPRESS',
+
+            ], [
+                'brand_name'        => 'C-STORE',
+
+            ], [
+                'brand_name'        => 'GRILL SHACK',
+
             ],
 
 
