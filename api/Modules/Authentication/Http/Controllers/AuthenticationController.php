@@ -572,6 +572,8 @@ class AuthenticationController extends Controller
             'zw-simbisa.com',
             'simbisabrands.com',
             'simbisa.com',
+            'za-simbisa.com',
+            'sz-simbisa.com',
         ];
 
         $emailDomain = strtolower(substr(strrchr($validated['email'], '@'), 1));

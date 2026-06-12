@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="updated email">
+    <list default="true" id="1eaf9bee-9d04-442b-88e0-13f80f01dbf9" name="Changes" comment="updated filters">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/Authentication/routes/api.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/Authentication/routes/api.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/ReportController.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" beforeDir="false" afterPath="$PROJECT_DIR$/api/Modules/RiskDepertment/Http/Controllers/RiskDepertmentController.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -263,7 +260,7 @@
       <workItem from="1779433178239" duration="17121000" />
       <workItem from="1780390724179" duration="2569000" />
       <workItem from="1780472604527" duration="4501000" />
-      <workItem from="1780906797783" duration="17515000" />
+      <workItem from="1780906797783" duration="18295000" />
     </task>
     <task id="LOCAL-00001" summary="test">
       <option name="closed" value="true" />
@@ -385,7 +382,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781001043744</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="updated filters">
+      <option name="closed" value="true" />
+      <created>1781237380595</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1781237380595</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -400,7 +405,8 @@
     <MESSAGE value="going to vps" />
     <MESSAGE value="updated report controller" />
     <MESSAGE value="updated email" />
-    <option name="LAST_COMMIT_MESSAGE" value="updated email" />
+    <MESSAGE value="updated filters" />
+    <option name="LAST_COMMIT_MESSAGE" value="updated filters" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -425,7 +431,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="php-line-method">
           <url>file://$PROJECT_DIR$/api/Modules/Authentication/Http/Controllers/AuthenticationController.php</url>
-          <line>1655</line>
+          <line>1657</line>
           <properties>
             <option name="className" value="\Modules\Authentication\Http\Controllers\AuthenticationController" />
             <option name="methodName" value="listDepertments" />
